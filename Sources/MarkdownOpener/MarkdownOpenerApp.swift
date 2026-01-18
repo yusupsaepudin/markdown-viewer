@@ -25,6 +25,33 @@ struct MarkdownOpenerApp: App {
                 .keyboardShortcut("s", modifiers: .command)
                 .disabled(appState.currentFileURL == nil)
             }
+
+            CommandGroup(after: .toolbar) {
+                Button("Toggle Read/Edit Mode") {
+                    appState.toggleViewMode()
+                }
+                .keyboardShortcut("e", modifiers: .command)
+
+                Divider()
+
+                Menu("Theme") {
+                    Button("Light") { appState.theme = .light }
+                    Button("Dark") { appState.theme = .dark }
+                    Button("Sepia") { appState.theme = .sepia }
+                }
+
+                Divider()
+
+                Button("Increase Font Size") {
+                    appState.fontSize = min(24, appState.fontSize + 1)
+                }
+                .keyboardShortcut("+", modifiers: .command)
+
+                Button("Decrease Font Size") {
+                    appState.fontSize = max(12, appState.fontSize - 1)
+                }
+                .keyboardShortcut("-", modifiers: .command)
+            }
         }
     }
 
@@ -40,6 +67,20 @@ struct MarkdownOpenerApp: App {
     }
 }
 
+// MARK: - View Mode
+enum ViewMode: String, CaseIterable {
+    case read = "Read"
+    case edit = "Edit"
+}
+
+// MARK: - Theme
+enum AppTheme: String, CaseIterable {
+    case light = "Light"
+    case dark = "Dark"
+    case sepia = "Sepia"
+}
+
+// MARK: - App State
 class AppState: ObservableObject {
     @Published var markdownText: String = """
     # Welcome to Markdown Opener
@@ -50,7 +91,9 @@ class AppState: ObservableObject {
 
     - **Live preview** as you type
     - Syntax highlighting for code blocks
-    - Dark mode support
+    - **Read/Edit toggle** - Press `Cmd+E`
+    - **Theme options** - Light, Dark, Sepia
+    - **Typography controls** - Adjust font size and width
 
     ## Code Example
 
@@ -69,11 +112,23 @@ class AppState: ObservableObject {
 
     ## Try it out!
 
-    Start typing in the editor on the left.
+    - Press `Cmd+E` to toggle between Read and Edit mode
+    - Use `Cmd++` / `Cmd+-` to adjust font size
+    - Click the theme button to switch themes
     """
 
     @Published var currentFileURL: URL?
     @Published var windowTitle: String = "Markdown Opener"
+
+    // View settings
+    @Published var viewMode: ViewMode = .edit
+    @Published var theme: AppTheme = .light
+    @Published var fontSize: CGFloat = 16
+    @Published var contentWidth: CGFloat = 720
+
+    func toggleViewMode() {
+        viewMode = viewMode == .edit ? .read : .edit
+    }
 
     func openFile(_ url: URL) {
         do {

@@ -3,6 +3,9 @@ import WebKit
 
 struct WebPreviewView: NSViewRepresentable {
     let markdown: String
+    let theme: AppTheme
+    let fontSize: CGFloat
+    let contentWidth: CGFloat
 
     func makeNSView(context: Context) -> WKWebView {
         let config = WKWebViewConfiguration()
@@ -12,7 +15,12 @@ struct WebPreviewView: NSViewRepresentable {
     }
 
     func updateNSView(_ webView: WKWebView, context: Context) {
-        let html = MarkdownRenderer.render(markdown)
+        let html = MarkdownRenderer.render(
+            markdown,
+            theme: theme,
+            fontSize: fontSize,
+            contentWidth: contentWidth
+        )
         webView.loadHTMLString(html, baseURL: nil)
     }
 }

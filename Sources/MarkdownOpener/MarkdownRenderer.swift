@@ -2,10 +2,18 @@ import Foundation
 import Markdown
 
 struct MarkdownRenderer {
-    static func render(_ markdown: String) -> String {
+    static func render(
+        _ markdown: String,
+        theme: AppTheme,
+        fontSize: CGFloat,
+        contentWidth: CGFloat
+    ) -> String {
         let document = Document(parsing: markdown)
         var htmlVisitor = HTMLVisitor()
         let bodyHTML = htmlVisitor.visit(document)
+
+        let themeCSS = getThemeCSS(theme)
+        let highlightTheme = getHighlightTheme(theme)
 
         return """
         <!DOCTYPE html>
@@ -13,123 +21,121 @@ struct MarkdownRenderer {
         <head>
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github-dark.min.css" media="(prefers-color-scheme: dark)">
-            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/github.min.css" media="(prefers-color-scheme: light)">
+            <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/\(highlightTheme).min.css">
             <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
             <style>
-                :root {
-                    color-scheme: light dark;
+                * {
+                    box-sizing: border-box;
                 }
                 body {
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-                    font-size: 15px;
-                    line-height: 1.6;
-                    padding: 20px;
-                    max-width: 900px;
+                    font-size: \(Int(fontSize))px;
+                    line-height: 1.7;
+                    padding: 32px 24px;
+                    max-width: \(Int(contentWidth))px;
                     margin: 0 auto;
-                    background: transparent;
-                }
-                @media (prefers-color-scheme: dark) {
-                    body { color: #e6edf3; }
-                    a { color: #58a6ff; }
-                    code:not(pre code) {
-                        background: #343942;
-                        color: #e6edf3;
-                    }
-                    blockquote {
-                        border-left-color: #3b434b;
-                        color: #8b949e;
-                    }
-                    table th, table td {
-                        border-color: #3b434b;
-                    }
-                    hr {
-                        background-color: #3b434b;
-                    }
-                }
-                @media (prefers-color-scheme: light) {
-                    body { color: #24292f; }
-                    a { color: #0969da; }
-                    code:not(pre code) {
-                        background: #f6f8fa;
-                        color: #24292f;
-                    }
-                    blockquote {
-                        border-left-color: #d0d7de;
-                        color: #57606a;
-                    }
-                    table th, table td {
-                        border-color: #d0d7de;
-                    }
-                    hr {
-                        background-color: #d0d7de;
-                    }
+                    \(themeCSS.body)
                 }
                 h1, h2, h3, h4, h5, h6 {
-                    margin-top: 24px;
-                    margin-bottom: 16px;
+                    margin-top: 1.5em;
+                    margin-bottom: 0.5em;
                     font-weight: 600;
-                    line-height: 1.25;
+                    line-height: 1.3;
+                    \(themeCSS.heading)
                 }
-                h1 { font-size: 2em; padding-bottom: 0.3em; border-bottom: 1px solid; border-color: inherit; }
-                h2 { font-size: 1.5em; padding-bottom: 0.3em; border-bottom: 1px solid; border-color: inherit; }
+                h1 {
+                    font-size: 2em;
+                    padding-bottom: 0.3em;
+                    border-bottom: 1px solid;
+                    \(themeCSS.h1Border)
+                }
+                h2 {
+                    font-size: 1.5em;
+                    padding-bottom: 0.3em;
+                    border-bottom: 1px solid;
+                    \(themeCSS.h2Border)
+                }
                 h3 { font-size: 1.25em; }
-                p { margin-bottom: 16px; }
+                h4 { font-size: 1em; }
+                p {
+                    margin-bottom: 1em;
+                    \(themeCSS.text)
+                }
+                a {
+                    text-decoration: none;
+                    \(themeCSS.link)
+                }
+                a:hover {
+                    text-decoration: underline;
+                }
                 code:not(pre code) {
                     padding: 0.2em 0.4em;
-                    border-radius: 6px;
-                    font-size: 85%;
-                    font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
+                    border-radius: 4px;
+                    font-size: 90%;
+                    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+                    \(themeCSS.inlineCode)
                 }
                 pre {
                     padding: 16px;
                     overflow: auto;
-                    border-radius: 6px;
-                    font-size: 85%;
-                    line-height: 1.45;
-                    margin-bottom: 16px;
+                    border-radius: 8px;
+                    font-size: 90%;
+                    line-height: 1.5;
+                    margin: 1em 0;
+                    \(themeCSS.codeBlock)
                 }
                 pre code {
-                    font-family: ui-monospace, SFMono-Regular, SF Mono, Menlo, Consolas, monospace;
-                    background: transparent;
+                    font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+                    background: transparent !important;
                     padding: 0;
                 }
                 blockquote {
-                    padding: 0 1em;
-                    margin: 0 0 16px;
-                    border-left: 0.25em solid;
+                    padding: 0.5em 1em;
+                    margin: 1em 0;
+                    border-left: 4px solid;
+                    border-radius: 0 4px 4px 0;
+                    \(themeCSS.blockquote)
+                }
+                blockquote p {
+                    margin: 0;
                 }
                 ul, ol {
-                    padding-left: 2em;
-                    margin-bottom: 16px;
+                    padding-left: 1.5em;
+                    margin-bottom: 1em;
                 }
-                li { margin: 4px 0; }
+                li {
+                    margin: 0.3em 0;
+                    \(themeCSS.text)
+                }
                 table {
                     border-collapse: collapse;
-                    margin-bottom: 16px;
+                    margin: 1em 0;
                     width: 100%;
+                    \(themeCSS.table)
                 }
                 table th, table td {
-                    padding: 6px 13px;
+                    padding: 10px 14px;
                     border: 1px solid;
+                    \(themeCSS.tableCell)
                 }
                 table th {
                     font-weight: 600;
+                    \(themeCSS.tableHeader)
                 }
                 hr {
-                    height: 0.25em;
+                    height: 2px;
                     border: 0;
-                    margin: 24px 0;
+                    margin: 2em 0;
+                    \(themeCSS.hr)
                 }
                 img {
                     max-width: 100%;
                     height: auto;
+                    border-radius: 8px;
+                    margin: 1em 0;
                 }
-                a {
-                    text-decoration: none;
-                }
-                a:hover {
-                    text-decoration: underline;
+                strong {
+                    font-weight: 600;
                 }
             </style>
         </head>
@@ -140,6 +146,83 @@ struct MarkdownRenderer {
         </html>
         """
     }
+
+    private static func getHighlightTheme(_ theme: AppTheme) -> String {
+        switch theme {
+        case .light: return "github"
+        case .dark: return "github-dark"
+        case .sepia: return "stackoverflow-light"
+        }
+    }
+
+    private static func getThemeCSS(_ theme: AppTheme) -> ThemeCSS {
+        switch theme {
+        case .light:
+            return ThemeCSS(
+                body: "background: #ffffff; color: #24292f;",
+                heading: "color: #1f2328;",
+                text: "color: #24292f;",
+                link: "color: #0969da;",
+                inlineCode: "background: #f6f8fa; color: #24292f;",
+                codeBlock: "background: #f6f8fa;",
+                blockquote: "background: #f6f8fa; border-left-color: #d0d7de; color: #57606a;",
+                table: "",
+                tableCell: "border-color: #d0d7de;",
+                tableHeader: "background: #f6f8fa;",
+                h1Border: "border-color: #d0d7de;",
+                h2Border: "border-color: #d0d7de;",
+                hr: "background: #d0d7de;"
+            )
+        case .dark:
+            return ThemeCSS(
+                body: "background: #0d1117; color: #e6edf3;",
+                heading: "color: #ffffff;",
+                text: "color: #e6edf3;",
+                link: "color: #58a6ff;",
+                inlineCode: "background: #343942; color: #e6edf3;",
+                codeBlock: "background: #161b22;",
+                blockquote: "background: #161b22; border-left-color: #3b434b; color: #8b949e;",
+                table: "",
+                tableCell: "border-color: #30363d;",
+                tableHeader: "background: #161b22;",
+                h1Border: "border-color: #30363d;",
+                h2Border: "border-color: #30363d;",
+                hr: "background: #30363d;"
+            )
+        case .sepia:
+            return ThemeCSS(
+                body: "background: #f9f5e9; color: #5c4b37;",
+                heading: "color: #3d3125;",
+                text: "color: #5c4b37;",
+                link: "color: #8b6914;",
+                inlineCode: "background: #f0e8d6; color: #5c4b37;",
+                codeBlock: "background: #f0e8d6;",
+                blockquote: "background: #f0e8d6; border-left-color: #d4c4a8; color: #7a6b57;",
+                table: "",
+                tableCell: "border-color: #d4c4a8;",
+                tableHeader: "background: #f0e8d6;",
+                h1Border: "border-color: #d4c4a8;",
+                h2Border: "border-color: #d4c4a8;",
+                hr: "background: #d4c4a8;"
+            )
+        }
+    }
+}
+
+private struct ThemeCSS {
+    let body: String
+    let heading: String
+    let text: String
+    let link: String
+    let inlineCode: String
+    let codeBlock: String
+    let blockquote: String
+    let table: String
+    let tableCell: String
+    let tableHeader: String
+    let h1Border: String
+    let h2Border: String
+    let hr: String
 }
 
 struct HTMLVisitor: MarkupVisitor {
