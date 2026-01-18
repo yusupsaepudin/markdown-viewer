@@ -2,167 +2,164 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
-    @State private var showSettings = false
+    @State private var isToolbarVisible = true
 
     var body: some View {
-        VStack(spacing: 0) {
-            // Toolbar
-            toolbar
-
+        ZStack(alignment: .top) {
             // Main content
-            if appState.viewMode == .read {
-                readModeView
-            } else {
-                editModeView
+            mainContent
+                .padding(.top, isToolbarVisible ? 52 : 0)
+
+            // Floating toolbar
+            if isToolbarVisible {
+                toolbar
+                    .transition(.move(edge: .top).combined(with: .opacity))
             }
         }
-        .frame(minWidth: 600, minHeight: 400)
+        .frame(minWidth: 700, minHeight: 500)
+        .background(backgroundColor)
+        .animation(.easeInOut(duration: 0.2), value: isToolbarVisible)
+        .onHover { hovering in
+            // Auto-hide toolbar logic could go here
+        }
+    }
+
+    // MARK: - Main Content
+    @ViewBuilder
+    private var mainContent: some View {
+        if appState.viewMode == .read {
+            // Read mode: rendered preview
+            WebPreviewView(
+                markdown: appState.markdownText,
+                theme: appState.theme,
+                fontSize: appState.fontSize,
+                contentWidth: appState.contentWidth
+            )
+        } else {
+            // Edit mode: single editable text view (no split)
+            editableMarkdownView
+        }
+    }
+
+    // MARK: - Editable Markdown View (Single Pane)
+    private var editableMarkdownView: some View {
+        ScrollView {
+            TextEditor(text: $appState.markdownText)
+                .font(.system(size: appState.fontSize, design: .monospaced))
+                .scrollContentBackground(.hidden)
+                .frame(maxWidth: appState.contentWidth)
+                .frame(maxWidth: .infinity)
+                .padding(.horizontal, 24)
+                .padding(.vertical, 16)
+        }
         .background(backgroundColor)
     }
 
-    // MARK: - Toolbar
+    // MARK: - Minimal Floating Toolbar
     private var toolbar: some View {
-        HStack(spacing: 12) {
-            // Mode toggle
-            Picker("Mode", selection: $appState.viewMode) {
-                ForEach(ViewMode.allCases, id: \.self) { mode in
-                    Text(mode.rawValue).tag(mode)
-                }
+        HStack(spacing: 16) {
+            // Mode toggle (clean, no label)
+            Picker("", selection: $appState.viewMode) {
+                Text("Read").tag(ViewMode.read)
+                Text("Edit").tag(ViewMode.edit)
             }
             .pickerStyle(.segmented)
-            .frame(width: 120)
+            .frame(width: 100)
+            .labelsHidden()
 
-            Divider()
-                .frame(height: 20)
+            Spacer()
+                .frame(width: 8)
 
-            // Theme picker
+            // Theme button
             Menu {
                 ForEach(AppTheme.allCases, id: \.self) { theme in
                     Button {
-                        appState.theme = theme
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            appState.theme = theme
+                        }
                     } label: {
                         HStack {
+                            Image(systemName: iconForTheme(theme))
                             Text(theme.rawValue)
                             if appState.theme == theme {
+                                Spacer()
                                 Image(systemName: "checkmark")
                             }
                         }
                     }
                 }
             } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: themeIcon)
-                    Text(appState.theme.rawValue)
-                }
+                Image(systemName: themeIcon)
+                    .font(.system(size: 14, weight: .medium))
+                    .frame(width: 28, height: 28)
             }
             .menuStyle(.borderlessButton)
-            .frame(width: 80)
+            .help("Theme")
 
-            Divider()
-                .frame(height: 20)
-
-            // Font size controls
-            HStack(spacing: 8) {
+            // Font size
+            HStack(spacing: 4) {
                 Button {
                     appState.fontSize = max(12, appState.fontSize - 1)
                 } label: {
-                    Image(systemName: "textformat.size.smaller")
+                    Image(systemName: "minus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.borderless)
+                .help("Decrease font size (⌘-)")
 
-                Text("\(Int(appState.fontSize))px")
-                    .font(.system(.caption, design: .monospaced))
-                    .frame(width: 40)
+                Text("\(Int(appState.fontSize))")
+                    .font(.system(size: 12, weight: .medium, design: .rounded))
+                    .foregroundColor(.secondary)
+                    .frame(width: 24)
 
                 Button {
                     appState.fontSize = min(24, appState.fontSize + 1)
                 } label: {
-                    Image(systemName: "textformat.size.larger")
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 24, height: 24)
                 }
                 .buttonStyle(.borderless)
+                .help("Increase font size (⌘+)")
             }
 
-            Divider()
-                .frame(height: 20)
-
-            // Content width slider
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.left.and.right")
-                    .foregroundColor(.secondary)
-                Slider(value: $appState.contentWidth, in: 500...1200, step: 20)
-                    .frame(width: 100)
+            // Width control (simplified)
+            Menu {
+                Button("Narrow (560px)") { appState.contentWidth = 560 }
+                Button("Medium (720px)") { appState.contentWidth = 720 }
+                Button("Wide (900px)") { appState.contentWidth = 900 }
+                Button("Full (1100px)") { appState.contentWidth = 1100 }
+            } label: {
+                Image(systemName: "arrow.left.arrow.right")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 28, height: 28)
             }
-
-            Spacer()
-
-            // Keyboard hint
-            Text("⌘E toggle")
-                .font(.caption)
-                .foregroundColor(.secondary)
+            .menuStyle(.borderlessButton)
+            .help("Content width")
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
-        .background(Color(NSColor.controlBackgroundColor))
-    }
-
-    // MARK: - Read Mode (Full Preview)
-    private var readModeView: some View {
-        WebPreviewView(
-            markdown: appState.markdownText,
-            theme: appState.theme,
-            fontSize: appState.fontSize,
-            contentWidth: appState.contentWidth
-        )
-    }
-
-    // MARK: - Edit Mode (Split View)
-    private var editModeView: some View {
-        HSplitView {
-            // Editor pane
-            VStack(spacing: 0) {
-                HStack {
-                    Text("Editor")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-
-                TextEditor(text: $appState.markdownText)
-                    .font(.system(size: appState.fontSize - 2, design: .monospaced))
-                    .scrollContentBackground(.hidden)
-                    .background(editorBackgroundColor)
-            }
-            .frame(minWidth: 250)
-
-            // Preview pane
-            VStack(spacing: 0) {
-                HStack {
-                    Text("Preview")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color(NSColor.controlBackgroundColor).opacity(0.5))
-
-                WebPreviewView(
-                    markdown: appState.markdownText,
-                    theme: appState.theme,
-                    fontSize: appState.fontSize,
-                    contentWidth: appState.contentWidth
-                )
-            }
-            .frame(minWidth: 250)
+        .padding(.horizontal, 20)
+        .padding(.vertical, 12)
+        .background {
+            RoundedRectangle(cornerRadius: 10)
+                .fill(toolbarBackground)
+                .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
         }
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
     }
 
     // MARK: - Theme Helpers
     private var themeIcon: String {
         switch appState.theme {
+        case .light: return "sun.max.fill"
+        case .dark: return "moon.fill"
+        case .sepia: return "book.fill"
+        }
+    }
+
+    private func iconForTheme(_ theme: AppTheme) -> String {
+        switch theme {
         case .light: return "sun.max"
         case .dark: return "moon"
         case .sepia: return "book"
@@ -171,17 +168,17 @@ struct ContentView: View {
 
     private var backgroundColor: Color {
         switch appState.theme {
-        case .light: return Color(NSColor.windowBackgroundColor)
-        case .dark: return Color(red: 0.1, green: 0.1, blue: 0.1)
-        case .sepia: return Color(red: 0.96, green: 0.94, blue: 0.88)
+        case .light: return Color(red: 0.98, green: 0.98, blue: 0.98)
+        case .dark: return Color(red: 0.11, green: 0.11, blue: 0.12)
+        case .sepia: return Color(red: 0.97, green: 0.94, blue: 0.88)
         }
     }
 
-    private var editorBackgroundColor: Color {
+    private var toolbarBackground: Color {
         switch appState.theme {
-        case .light: return Color(NSColor.textBackgroundColor)
-        case .dark: return Color(red: 0.12, green: 0.12, blue: 0.12)
-        case .sepia: return Color(red: 0.98, green: 0.96, blue: 0.90)
+        case .light: return Color(red: 1, green: 1, blue: 1).opacity(0.95)
+        case .dark: return Color(red: 0.18, green: 0.18, blue: 0.20).opacity(0.95)
+        case .sepia: return Color(red: 0.99, green: 0.96, blue: 0.90).opacity(0.95)
         }
     }
 }

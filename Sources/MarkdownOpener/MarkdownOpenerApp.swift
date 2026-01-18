@@ -120,10 +120,10 @@ class AppState: ObservableObject {
     @Published var currentFileURL: URL?
     @Published var windowTitle: String = "Markdown Opener"
 
-    // View settings
-    @Published var viewMode: ViewMode = .edit
-    @Published var theme: AppTheme = .light
-    @Published var fontSize: CGFloat = 16
+    // View settings - dark mode default for better eye comfort
+    @Published var viewMode: ViewMode = .read
+    @Published var theme: AppTheme = .dark
+    @Published var fontSize: CGFloat = 17
     @Published var contentWidth: CGFloat = 720
 
     func toggleViewMode() {
