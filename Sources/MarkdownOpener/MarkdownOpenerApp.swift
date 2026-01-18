@@ -3,6 +3,7 @@ import SwiftUI
 @main
 struct MarkdownOpenerApp: App {
     @StateObject private var appState = AppState()
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
 
     var body: some Scene {
         WindowGroup {
@@ -10,6 +11,14 @@ struct MarkdownOpenerApp: App {
                 .environmentObject(appState)
                 .onOpenURL { url in
                     appState.openFile(url)
+                }
+                .onAppear {
+                    // Handle file opened via double-click or drag
+                    appDelegate.appState = appState
+                    if let url = appDelegate.pendingFileURL {
+                        appState.openFile(url)
+                        appDelegate.pendingFileURL = nil
+                    }
                 }
         }
         .commands {
@@ -26,6 +35,14 @@ struct MarkdownOpenerApp: App {
                 .disabled(appState.currentFileURL == nil)
             }
 
+            // Find menu
+            CommandGroup(replacing: .textEditing) {
+                Button("Find...") {
+                    NotificationCenter.default.post(name: .toggleSearch, object: nil)
+                }
+                .keyboardShortcut("f", modifiers: .command)
+            }
+
             CommandGroup(after: .toolbar) {
                 Button("Toggle Read/Edit Mode") {
                     appState.toggleViewMode()
@@ -33,7 +50,9 @@ struct MarkdownOpenerApp: App {
                 .keyboardShortcut("e", modifiers: .command)
 
                 Button("Toggle Table of Contents") {
-                    appState.showTOC.toggle()
+                    withAnimation {
+                        appState.showTOC.toggle()
+                    }
                 }
                 .keyboardShortcut("t", modifiers: .command)
 
@@ -75,6 +94,25 @@ struct MarkdownOpenerApp: App {
         if panel.runModal() == .OK, let url = panel.url {
             appState.openFile(url)
         }
+    }
+}
+
+// MARK: - App Delegate for handling file opens
+class AppDelegate: NSObject, NSApplicationDelegate {
+    var appState: AppState?
+    var pendingFileURL: URL?
+
+    func application(_ application: NSApplication, open urls: [URL]) {
+        guard let url = urls.first else { return }
+        if let appState = appState {
+            appState.openFile(url)
+        } else {
+            pendingFileURL = url
+        }
+    }
+
+    func applicationDidFinishLaunching(_ notification: Notification) {
+        // File opening is handled via application(_:open:)
     }
 }
 
@@ -145,6 +183,7 @@ class AppState: ObservableObject {
     - Syntax highlighting for code blocks
     - **Read/Edit toggle** - Press `Cmd+E`
     - **Table of Contents** - Press `Cmd+T`
+    - **Search** - Press `Cmd+F`
     - **Theme options** - Light, Dark, Sepia
     - **Typography controls** - Font size, line height, width
 
@@ -177,6 +216,7 @@ class AppState: ObservableObject {
     |----------|--------|
     | ⌘E | Toggle Read/Edit |
     | ⌘T | Toggle TOC |
+    | ⌘F | Search |
     | ⌘+ | Increase font |
     | ⌘- | Decrease font |
 
@@ -185,6 +225,7 @@ class AppState: ObservableObject {
     - Click any heading in the TOC to jump to it
     - Use Sepia theme for reduced eye strain
     - Adjust line height for comfortable reading
+    - Links open in your default browser
     """
 
     @Published var currentFileURL: URL?
@@ -198,6 +239,7 @@ class AppState: ObservableObject {
     @Published var lineHeight: LineHeight = .normal
     @Published var showTOC: Bool = false
     @Published var scrollToHeadingId: String? = nil
+    @Published var searchQuery: String = ""
 
     // Computed: Extract headings from markdown for TOC
     var headings: [Heading] {
@@ -239,10 +281,23 @@ class AppState: ObservableObject {
     }
 
     func openFile(_ url: URL) {
+        // Request access to the file
+        let accessing = url.startAccessingSecurityScopedResource()
+        defer {
+            if accessing {
+                url.stopAccessingSecurityScopedResource()
+            }
+        }
+
         do {
             markdownText = try String(contentsOf: url, encoding: .utf8)
             currentFileURL = url
             windowTitle = url.lastPathComponent
+
+            // Update window title
+            DispatchQueue.main.async {
+                NSApplication.shared.windows.first?.title = url.lastPathComponent
+            }
         } catch {
             print("Error opening file: \(error)")
         }

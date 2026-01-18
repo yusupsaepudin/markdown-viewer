@@ -3,6 +3,10 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @State private var isToolbarVisible = true
+    @State private var activeHeadingId: String? = nil
+    @State private var isSearchVisible = false
+    @State private var searchText = ""
+    @FocusState private var isSearchFocused: Bool
 
     var body: some View {
         HStack(spacing: 0) {
@@ -21,12 +25,97 @@ struct ContentView: View {
                     toolbar
                         .transition(.move(edge: .top).combined(with: .opacity))
                 }
+
+                // Search overlay
+                if isSearchVisible {
+                    searchOverlay
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                }
             }
         }
         .frame(minWidth: 700, minHeight: 500)
         .background(backgroundColor)
         .animation(.easeInOut(duration: 0.2), value: isToolbarVisible)
         .animation(.easeInOut(duration: 0.25), value: appState.showTOC)
+        .animation(.easeInOut(duration: 0.15), value: isSearchVisible)
+        .onReceive(NotificationCenter.default.publisher(for: .toggleSearch)) { _ in
+            toggleSearch()
+        }
+    }
+
+    private func toggleSearch() {
+        withAnimation {
+            isSearchVisible.toggle()
+            if isSearchVisible {
+                isSearchFocused = true
+            } else {
+                searchText = ""
+            }
+        }
+    }
+
+    // MARK: - Search Overlay
+    private var searchOverlay: some View {
+        VStack {
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass")
+                    .foregroundColor(.secondary)
+                    .font(.system(size: 14))
+
+                TextField("Search in document...", text: $searchText)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 14))
+                    .focused($isSearchFocused)
+                    .onSubmit {
+                        // Trigger search on enter
+                        appState.searchQuery = searchText
+                    }
+                    .onChange(of: searchText) { newValue in
+                        appState.searchQuery = newValue
+                    }
+
+                if !searchText.isEmpty {
+                    Button {
+                        searchText = ""
+                        appState.searchQuery = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.secondary)
+                            .font(.system(size: 14))
+                    }
+                    .buttonStyle(.borderless)
+                }
+
+                Button {
+                    toggleSearch()
+                } label: {
+                    Text("Done")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .keyboardShortcut(.escape, modifiers: [])
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(searchBackground)
+                    .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, isToolbarVisible ? 60 : 10)
+
+            Spacer()
+        }
+    }
+
+    private var searchBackground: Color {
+        switch appState.theme {
+        case .light: return Color.white
+        case .dark: return Color(red: 0.18, green: 0.18, blue: 0.20)
+        case .sepia: return Color(red: 0.99, green: 0.96, blue: 0.90)
+        }
     }
 
     // MARK: - Table of Contents Sidebar
@@ -57,14 +146,24 @@ struct ContentView: View {
             .padding(.vertical, 10)
 
             // Headings list
-            ScrollView {
-                VStack(alignment: .leading, spacing: 1) {
-                    ForEach(appState.headings) { heading in
-                        tocItem(heading)
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 1) {
+                        ForEach(appState.headings) { heading in
+                            tocItem(heading)
+                                .id(heading.id)
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 6)
+                }
+                .onChange(of: activeHeadingId) { newId in
+                    if let id = newId {
+                        withAnimation(.easeInOut(duration: 0.2)) {
+                            proxy.scrollTo(id, anchor: .center)
+                        }
                     }
                 }
-                .padding(.horizontal, 8)
-                .padding(.vertical, 6)
             }
         }
         .frame(width: 200)
@@ -76,24 +175,33 @@ struct ContentView: View {
     private func tocItem(_ heading: Heading) -> some View {
         let isH1 = heading.level == 1
         let isHovered = hoveredHeadingId == heading.id
+        let isActive = activeHeadingId == heading.id
 
         return Button {
             appState.scrollToHeading(heading)
         } label: {
             HStack(spacing: 0) {
+                // Active indicator
+                RoundedRectangle(cornerRadius: 1)
+                    .fill(isActive ? accentColor : Color.clear)
+                    .frame(width: 2)
+                    .padding(.vertical, 2)
+
                 Text(heading.text)
-                    .font(.system(size: isH1 ? 12 : 11, weight: isH1 ? .semibold : .regular))
-                    .foregroundColor(isH1 ? .primary : .secondary)
+                    .font(.system(size: isH1 ? 12 : 11, weight: isActive ? .semibold : (isH1 ? .medium : .regular)))
+                    .foregroundColor(isActive ? accentColor : (isH1 ? .primary : .secondary))
                     .lineLimit(1)
                     .truncationMode(.tail)
+                    .padding(.leading, 6)
+
                 Spacer(minLength: 4)
             }
-            .padding(.leading, CGFloat(heading.level - 1) * 10 + 8)
+            .padding(.leading, CGFloat(heading.level - 1) * 10 + 4)
             .padding(.trailing, 8)
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 4)
-                    .fill(isHovered ? tocHoverColor : Color.clear)
+                    .fill(isActive ? tocActiveColor : (isHovered ? tocHoverColor : Color.clear))
             )
             .contentShape(Rectangle())
         }
@@ -111,6 +219,14 @@ struct ContentView: View {
         }
     }
 
+    private var tocActiveColor: Color {
+        switch appState.theme {
+        case .light: return Color.blue.opacity(0.1)
+        case .dark: return Color.blue.opacity(0.15)
+        case .sepia: return Color.brown.opacity(0.12)
+        }
+    }
+
     // MARK: - Main Content
     @ViewBuilder
     private var mainContent: some View {
@@ -121,7 +237,11 @@ struct ContentView: View {
                 fontSize: appState.fontSize,
                 contentWidth: appState.contentWidth,
                 lineHeight: appState.lineHeight,
-                scrollToId: appState.scrollToHeadingId
+                scrollToId: appState.scrollToHeadingId,
+                searchText: appState.searchQuery,
+                onActiveHeadingChange: { headingId in
+                    activeHeadingId = headingId
+                }
             )
         } else {
             editableMarkdownView
@@ -156,6 +276,17 @@ struct ContentView: View {
             }
             .buttonStyle(.borderless)
             .help("Table of Contents (⌘T)")
+
+            // Search button
+            Button {
+                toggleSearch()
+            } label: {
+                Image(systemName: "magnifyingglass")
+                    .font(.system(size: 13, weight: .medium))
+                    .frame(width: 28, height: 28)
+            }
+            .buttonStyle(.borderless)
+            .help("Search (⌘F)")
 
             Divider()
                 .frame(height: 16)
@@ -342,4 +473,9 @@ struct ContentView: View {
         case .sepia: return Color(red: 0.99, green: 0.96, blue: 0.90).opacity(0.95)
         }
     }
+}
+
+// Notification for search toggle
+extension Notification.Name {
+    static let toggleSearch = Notification.Name("toggleSearch")
 }
