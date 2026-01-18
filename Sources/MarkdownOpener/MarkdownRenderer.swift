@@ -6,7 +6,8 @@ struct MarkdownRenderer {
         _ markdown: String,
         theme: AppTheme,
         fontSize: CGFloat,
-        contentWidth: CGFloat
+        contentWidth: CGFloat,
+        lineHeight: CGFloat
     ) -> String {
         let document = Document(parsing: markdown)
         var htmlVisitor = HTMLVisitor()
@@ -27,26 +28,31 @@ struct MarkdownRenderer {
                 * {
                     box-sizing: border-box;
                 }
+                html {
+                    scroll-behavior: smooth;
+                }
                 body {
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
                     font-size: \(Int(fontSize))px;
-                    line-height: 1.7;
-                    padding: 32px 24px;
+                    line-height: \(String(format: "%.1f", lineHeight));
+                    padding: 32px 24px 64px;
                     max-width: \(Int(contentWidth))px;
                     margin: 0 auto;
                     \(themeCSS.body)
                 }
                 h1, h2, h3, h4, h5, h6 {
-                    margin-top: 1.5em;
-                    margin-bottom: 0.5em;
+                    margin-top: 1.8em;
+                    margin-bottom: 0.6em;
                     font-weight: 600;
                     line-height: 1.3;
+                    scroll-margin-top: 80px;
                     \(themeCSS.heading)
                 }
                 h1 {
                     font-size: 2em;
                     padding-bottom: 0.3em;
                     border-bottom: 1px solid;
+                    margin-top: 0;
                     \(themeCSS.h1Border)
                 }
                 h2 {
@@ -56,9 +62,9 @@ struct MarkdownRenderer {
                     \(themeCSS.h2Border)
                 }
                 h3 { font-size: 1.25em; }
-                h4 { font-size: 1em; }
+                h4 { font-size: 1.1em; }
                 p {
-                    margin-bottom: 1em;
+                    margin-bottom: 1.2em;
                     \(themeCSS.text)
                 }
                 a {
@@ -71,7 +77,7 @@ struct MarkdownRenderer {
                 code:not(pre code) {
                     padding: 0.2em 0.4em;
                     border-radius: 4px;
-                    font-size: 90%;
+                    font-size: 88%;
                     font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
                     \(themeCSS.inlineCode)
                 }
@@ -79,9 +85,9 @@ struct MarkdownRenderer {
                     padding: 16px;
                     overflow: auto;
                     border-radius: 8px;
-                    font-size: 90%;
+                    font-size: 88%;
                     line-height: 1.5;
-                    margin: 1em 0;
+                    margin: 1.2em 0;
                     \(themeCSS.codeBlock)
                 }
                 pre code {
@@ -90,32 +96,41 @@ struct MarkdownRenderer {
                     padding: 0;
                 }
                 blockquote {
-                    padding: 0.5em 1em;
-                    margin: 1em 0;
+                    padding: 0.8em 1.2em;
+                    margin: 1.2em 0;
                     border-left: 4px solid;
-                    border-radius: 0 4px 4px 0;
+                    border-radius: 0 6px 6px 0;
                     \(themeCSS.blockquote)
                 }
                 blockquote p {
                     margin: 0;
                 }
+                blockquote p + p {
+                    margin-top: 0.8em;
+                }
                 ul, ol {
-                    padding-left: 1.5em;
-                    margin-bottom: 1em;
+                    padding-left: 1.6em;
+                    margin-bottom: 1.2em;
                 }
                 li {
-                    margin: 0.3em 0;
+                    margin: 0.4em 0;
                     \(themeCSS.text)
+                }
+                li > ul, li > ol {
+                    margin-top: 0.4em;
+                    margin-bottom: 0.4em;
                 }
                 table {
                     border-collapse: collapse;
-                    margin: 1em 0;
+                    margin: 1.2em 0;
                     width: 100%;
+                    font-size: 95%;
                     \(themeCSS.table)
                 }
                 table th, table td {
                     padding: 10px 14px;
                     border: 1px solid;
+                    text-align: left;
                     \(themeCSS.tableCell)
                 }
                 table th {
@@ -125,7 +140,7 @@ struct MarkdownRenderer {
                 hr {
                     height: 2px;
                     border: 0;
-                    margin: 2em 0;
+                    margin: 2.5em 0;
                     \(themeCSS.hr)
                 }
                 img {
@@ -136,6 +151,17 @@ struct MarkdownRenderer {
                 }
                 strong {
                     font-weight: 600;
+                }
+                em {
+                    font-style: italic;
+                }
+                /* Target heading highlight animation */
+                h1:target, h2:target, h3:target, h4:target, h5:target, h6:target {
+                    animation: highlight 1.5s ease-out;
+                }
+                @keyframes highlight {
+                    0% { background-color: rgba(88, 166, 255, 0.3); }
+                    100% { background-color: transparent; }
                 }
             </style>
         </head>
@@ -248,8 +274,10 @@ struct HTMLVisitor: MarkupVisitor {
         "<p>\(defaultVisit(paragraph))</p>\n"
     }
 
-    mutating func visitHeading(_ heading: Heading) -> String {
-        "<h\(heading.level)>\(defaultVisit(heading))</h\(heading.level)>\n"
+    mutating func visitHeading(_ heading: Markdown.Heading) -> String {
+        let text = defaultVisit(heading)
+        let id = generateHeadingId(text)
+        return "<h\(heading.level) id=\"\(id)\">\(text)</h\(heading.level)>\n"
     }
 
     mutating func visitStrong(_ strong: Strong) -> String {
@@ -341,5 +369,13 @@ struct HTMLVisitor: MarkupVisitor {
             .replacingOccurrences(of: ">", with: "&gt;")
             .replacingOccurrences(of: "\"", with: "&quot;")
             .replacingOccurrences(of: "'", with: "&#39;")
+    }
+
+    private func generateHeadingId(_ text: String) -> String {
+        // Strip HTML tags and generate ID
+        let stripped = text.replacingOccurrences(of: "<[^>]+>", with: "", options: .regularExpression)
+        return stripped.lowercased()
+            .replacingOccurrences(of: " ", with: "-")
+            .replacingOccurrences(of: "[^a-z0-9-]", with: "", options: .regularExpression)
     }
 }

@@ -32,12 +32,23 @@ struct MarkdownOpenerApp: App {
                 }
                 .keyboardShortcut("e", modifiers: .command)
 
+                Button("Toggle Table of Contents") {
+                    appState.showTOC.toggle()
+                }
+                .keyboardShortcut("t", modifiers: .command)
+
                 Divider()
 
                 Menu("Theme") {
                     Button("Light") { appState.theme = .light }
                     Button("Dark") { appState.theme = .dark }
                     Button("Sepia") { appState.theme = .sepia }
+                }
+
+                Menu("Line Height") {
+                    ForEach(LineHeight.allCases, id: \.self) { height in
+                        Button(height.label) { appState.lineHeight = height }
+                    }
                 }
 
                 Divider()
@@ -80,6 +91,47 @@ enum AppTheme: String, CaseIterable {
     case sepia = "Sepia"
 }
 
+// MARK: - Line Height (Research-based optimal values)
+enum LineHeight: String, CaseIterable {
+    case compact = "1.5"    // Quick scanning
+    case normal = "1.7"     // Optimal for most reading
+    case relaxed = "1.9"    // Comfortable for long sessions
+    case spacious = "2.2"   // Low vision / very long sessions
+
+    var value: CGFloat {
+        CGFloat(Double(rawValue) ?? 1.7)
+    }
+
+    var label: String {
+        switch self {
+        case .compact: return "Compact (1.5)"
+        case .normal: return "Normal (1.7) - Recommended"
+        case .relaxed: return "Relaxed (1.9)"
+        case .spacious: return "Spacious (2.2)"
+        }
+    }
+
+    var shortLabel: String {
+        switch self {
+        case .compact: return "Compact"
+        case .normal: return "Normal"
+        case .relaxed: return "Relaxed"
+        case .spacious: return "Spacious"
+        }
+    }
+}
+
+// MARK: - Heading (for TOC)
+struct Heading: Identifiable, Equatable {
+    let id: String
+    let level: Int
+    let text: String
+
+    var indent: CGFloat {
+        CGFloat((level - 1) * 12)
+    }
+}
+
 // MARK: - App State
 class AppState: ObservableObject {
     @Published var markdownText: String = """
@@ -92,8 +144,17 @@ class AppState: ObservableObject {
     - **Live preview** as you type
     - Syntax highlighting for code blocks
     - **Read/Edit toggle** - Press `Cmd+E`
+    - **Table of Contents** - Press `Cmd+T`
     - **Theme options** - Light, Dark, Sepia
-    - **Typography controls** - Adjust font size and width
+    - **Typography controls** - Font size, line height, width
+
+    ## Reading Comfort
+
+    This app uses research-based typography settings:
+
+    - **Line height 1.7** is optimal for most reading
+    - **Content width ~720px** (65-75 characters per line)
+    - **System font** for best legibility
 
     ## Code Example
 
@@ -110,24 +171,71 @@ class AppState: ObservableObject {
         return fibonacci(n-1) + fibonacci(n-2)
     ```
 
-    ## Try it out!
+    ## Keyboard Shortcuts
 
-    - Press `Cmd+E` to toggle between Read and Edit mode
-    - Use `Cmd++` / `Cmd+-` to adjust font size
-    - Click the theme button to switch themes
+    | Shortcut | Action |
+    |----------|--------|
+    | ⌘E | Toggle Read/Edit |
+    | ⌘T | Toggle TOC |
+    | ⌘+ | Increase font |
+    | ⌘- | Decrease font |
+
+    ## Tips
+
+    - Click any heading in the TOC to jump to it
+    - Use Sepia theme for reduced eye strain
+    - Adjust line height for comfortable reading
     """
 
     @Published var currentFileURL: URL?
     @Published var windowTitle: String = "Markdown Opener"
 
-    // View settings - dark mode default for better eye comfort
+    // View settings - optimized defaults for reading
     @Published var viewMode: ViewMode = .read
     @Published var theme: AppTheme = .dark
     @Published var fontSize: CGFloat = 17
     @Published var contentWidth: CGFloat = 720
+    @Published var lineHeight: LineHeight = .normal
+    @Published var showTOC: Bool = false
+    @Published var scrollToHeadingId: String? = nil
+
+    // Computed: Extract headings from markdown for TOC
+    var headings: [Heading] {
+        let lines = markdownText.components(separatedBy: .newlines)
+        var result: [Heading] = []
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("#") {
+                var level = 0
+                for char in trimmed {
+                    if char == "#" { level += 1 }
+                    else { break }
+                }
+                if level >= 1 && level <= 6 {
+                    let text = String(trimmed.dropFirst(level)).trimmingCharacters(in: .whitespaces)
+                    if !text.isEmpty {
+                        let id = text.lowercased()
+                            .replacingOccurrences(of: " ", with: "-")
+                            .replacingOccurrences(of: "[^a-z0-9-]", with: "", options: .regularExpression)
+                        result.append(Heading(id: id, level: level, text: text))
+                    }
+                }
+            }
+        }
+        return result
+    }
 
     func toggleViewMode() {
         viewMode = viewMode == .edit ? .read : .edit
+    }
+
+    func scrollToHeading(_ heading: Heading) {
+        scrollToHeadingId = heading.id
+        // Reset after a short delay to allow re-clicking same heading
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+            self.scrollToHeadingId = nil
+        }
     }
 
     func openFile(_ url: URL) {
