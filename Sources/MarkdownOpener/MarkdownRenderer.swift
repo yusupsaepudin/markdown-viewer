@@ -35,38 +35,41 @@ struct MarkdownRenderer {
                     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
                     font-size: \(Int(fontSize))px;
                     line-height: \(String(format: "%.1f", lineHeight));
-                    padding: 32px 24px 64px;
+                    padding: 24px 24px 64px;
                     max-width: \(Int(contentWidth))px;
                     margin: 0 auto;
                     \(themeCSS.body)
                 }
+                /* Headings */
                 h1, h2, h3, h4, h5, h6 {
-                    margin-top: 1.8em;
-                    margin-bottom: 0.6em;
+                    margin-top: 1.5em;
+                    margin-bottom: 0.5em;
                     font-weight: 600;
                     line-height: 1.3;
                     scroll-margin-top: 80px;
                     \(themeCSS.heading)
                 }
                 h1 {
-                    font-size: 2em;
-                    padding-bottom: 0.3em;
+                    font-size: 1.8em;
+                    padding-bottom: 0.25em;
                     border-bottom: 1px solid;
                     margin-top: 0;
                     \(themeCSS.h1Border)
                 }
                 h2 {
-                    font-size: 1.5em;
-                    padding-bottom: 0.3em;
+                    font-size: 1.4em;
+                    padding-bottom: 0.2em;
                     border-bottom: 1px solid;
                     \(themeCSS.h2Border)
                 }
-                h3 { font-size: 1.25em; }
-                h4 { font-size: 1.1em; }
+                h3 { font-size: 1.2em; }
+                h4 { font-size: 1.05em; }
+                /* Paragraphs - tighter spacing */
                 p {
-                    margin-bottom: 1.2em;
+                    margin: 0 0 0.75em 0;
                     \(themeCSS.text)
                 }
+                /* Links */
                 a {
                     text-decoration: none;
                     \(themeCSS.link)
@@ -74,20 +77,22 @@ struct MarkdownRenderer {
                 a:hover {
                     text-decoration: underline;
                 }
+                /* Inline code */
                 code:not(pre code) {
-                    padding: 0.2em 0.4em;
+                    padding: 0.15em 0.35em;
                     border-radius: 4px;
-                    font-size: 88%;
+                    font-size: 87%;
                     font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
                     \(themeCSS.inlineCode)
                 }
+                /* Code blocks */
                 pre {
-                    padding: 16px;
+                    padding: 14px 16px;
                     overflow: auto;
-                    border-radius: 8px;
-                    font-size: 88%;
-                    line-height: 1.5;
-                    margin: 1.2em 0;
+                    border-radius: 6px;
+                    font-size: 87%;
+                    line-height: 1.45;
+                    margin: 0.75em 0;
                     \(themeCSS.codeBlock)
                 }
                 pre code {
@@ -95,40 +100,46 @@ struct MarkdownRenderer {
                     background: transparent !important;
                     padding: 0;
                 }
+                /* Blockquotes */
                 blockquote {
-                    padding: 0.8em 1.2em;
-                    margin: 1.2em 0;
-                    border-left: 4px solid;
-                    border-radius: 0 6px 6px 0;
+                    padding: 0.5em 1em;
+                    margin: 0.75em 0;
+                    border-left: 3px solid;
+                    border-radius: 0 4px 4px 0;
                     \(themeCSS.blockquote)
                 }
                 blockquote p {
                     margin: 0;
                 }
                 blockquote p + p {
-                    margin-top: 0.8em;
+                    margin-top: 0.5em;
                 }
+                /* Lists - TIGHT spacing like ChatGPT */
                 ul, ol {
-                    padding-left: 1.6em;
-                    margin-bottom: 1.2em;
+                    padding-left: 1.5em;
+                    margin: 0 0 0.75em 0;
                 }
                 li {
-                    margin: 0.4em 0;
+                    margin: 0.1em 0;
+                    padding: 0.05em 0;
                     \(themeCSS.text)
                 }
-                li > ul, li > ol {
-                    margin-top: 0.4em;
-                    margin-bottom: 0.4em;
+                li > p {
+                    margin: 0;
                 }
+                li > ul, li > ol {
+                    margin: 0.15em 0 0.15em 0;
+                }
+                /* Tables */
                 table {
                     border-collapse: collapse;
-                    margin: 1.2em 0;
+                    margin: 0.75em 0;
                     width: 100%;
-                    font-size: 95%;
+                    font-size: 94%;
                     \(themeCSS.table)
                 }
                 table th, table td {
-                    padding: 10px 14px;
+                    padding: 8px 12px;
                     border: 1px solid;
                     text-align: left;
                     \(themeCSS.tableCell)
@@ -137,17 +148,19 @@ struct MarkdownRenderer {
                     font-weight: 600;
                     \(themeCSS.tableHeader)
                 }
+                /* Horizontal rule */
                 hr {
-                    height: 2px;
+                    height: 1px;
                     border: 0;
-                    margin: 2.5em 0;
+                    margin: 1.5em 0;
                     \(themeCSS.hr)
                 }
+                /* Images */
                 img {
                     max-width: 100%;
                     height: auto;
-                    border-radius: 8px;
-                    margin: 1em 0;
+                    border-radius: 6px;
+                    margin: 0.75em 0;
                 }
                 strong {
                     font-weight: 600;
@@ -155,12 +168,12 @@ struct MarkdownRenderer {
                 em {
                     font-style: italic;
                 }
-                /* Target heading highlight animation */
+                /* Heading highlight on scroll */
                 h1:target, h2:target, h3:target, h4:target, h5:target, h6:target {
-                    animation: highlight 1.5s ease-out;
+                    animation: highlight 1.2s ease-out;
                 }
                 @keyframes highlight {
-                    0% { background-color: rgba(88, 166, 255, 0.3); }
+                    0% { background-color: rgba(88, 166, 255, 0.25); }
                     100% { background-color: transparent; }
                 }
             </style>

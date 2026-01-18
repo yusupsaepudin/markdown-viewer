@@ -26,15 +26,25 @@ struct WebPreviewView: NSViewRepresentable {
             lineHeight: lineHeight.value
         )
 
-        // Check if we need to scroll to a heading
-        if let headingId = scrollToId {
-            // If content changed, reload and then scroll
-            webView.loadHTMLString(html, baseURL: nil)
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-                let js = "document.getElementById('\(headingId)')?.scrollIntoView({behavior: 'smooth', block: 'start'});"
-                webView.evaluateJavaScript(js, completionHandler: nil)
-            }
-        } else {
+        // Check if we need to scroll to a heading (without reload)
+        if let headingId = scrollToId, !headingId.isEmpty {
+            // Only use JavaScript scroll - don't reload
+            let js = """
+            (function() {
+                var el = document.getElementById('\(headingId)');
+                if (el) {
+                    el.scrollIntoView({behavior: 'smooth', block: 'start'});
+                }
+            })();
+            """
+            webView.evaluateJavaScript(js, completionHandler: nil)
+            return
+        }
+
+        // Only reload HTML if content actually changed
+        let newContentHash = html.hashValue
+        if context.coordinator.lastContentHash != newContentHash {
+            context.coordinator.lastContentHash = newContentHash
             webView.loadHTMLString(html, baseURL: nil)
         }
     }
@@ -45,5 +55,6 @@ struct WebPreviewView: NSViewRepresentable {
 
     class Coordinator {
         var webView: WKWebView?
+        var lastContentHash: Int = 0
     }
 }

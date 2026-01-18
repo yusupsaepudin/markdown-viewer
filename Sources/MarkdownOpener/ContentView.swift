@@ -34,66 +34,81 @@ struct ContentView: View {
         VStack(alignment: .leading, spacing: 0) {
             // Header
             HStack {
-                Text("Contents")
-                    .font(.system(size: 12, weight: .semibold))
+                Image(systemName: "list.bullet.rectangle")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundColor(.secondary)
+                Text("On this page")
+                    .font(.system(size: 11, weight: .medium))
                     .foregroundColor(.secondary)
                 Spacer()
                 Button {
-                    appState.showTOC = false
+                    withAnimation(.easeOut(duration: 0.2)) {
+                        appState.showTOC = false
+                    }
                 } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundColor(.secondary)
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.system(size: 14))
+                        .foregroundColor(.secondary.opacity(0.6))
                 }
                 .buttonStyle(.borderless)
-                .help("Close TOC (⌘T)")
+                .help("Close (⌘T)")
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-
-            Divider()
-                .opacity(0.5)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
 
             // Headings list
             ScrollView {
-                LazyVStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     ForEach(appState.headings) { heading in
                         tocItem(heading)
                     }
                 }
-                .padding(.vertical, 8)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
             }
         }
-        .frame(width: 220)
+        .frame(width: 200)
         .background(tocBackground)
     }
 
+    @State private var hoveredHeadingId: String? = nil
+
     private func tocItem(_ heading: Heading) -> some View {
-        Button {
+        let isH1 = heading.level == 1
+        let isHovered = hoveredHeadingId == heading.id
+
+        return Button {
             appState.scrollToHeading(heading)
         } label: {
-            HStack(spacing: 8) {
-                // Level indicator
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(heading.level == 1 ? accentColor : Color.secondary.opacity(0.3))
-                    .frame(width: 2, height: heading.level == 1 ? 16 : 12)
-
+            HStack(spacing: 0) {
                 Text(heading.text)
-                    .font(.system(size: heading.level == 1 ? 13 : 12, weight: heading.level == 1 ? .semibold : .regular))
-                    .foregroundColor(heading.level == 1 ? .primary : .secondary)
-                    .lineLimit(2)
-                    .multilineTextAlignment(.leading)
-
-                Spacer()
+                    .font(.system(size: isH1 ? 12 : 11, weight: isH1 ? .semibold : .regular))
+                    .foregroundColor(isH1 ? .primary : .secondary)
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                Spacer(minLength: 4)
             }
-            .padding(.leading, heading.indent)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
+            .padding(.leading, CGFloat(heading.level - 1) * 10 + 8)
+            .padding(.trailing, 8)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isHovered ? tocHoverColor : Color.clear)
+            )
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .background(Color.clear)
-        .cornerRadius(4)
+        .onHover { hovering in
+            hoveredHeadingId = hovering ? heading.id : nil
+        }
+    }
+
+    private var tocHoverColor: Color {
+        switch appState.theme {
+        case .light: return Color.black.opacity(0.05)
+        case .dark: return Color.white.opacity(0.08)
+        case .sepia: return Color.brown.opacity(0.08)
+        }
     }
 
     // MARK: - Main Content
