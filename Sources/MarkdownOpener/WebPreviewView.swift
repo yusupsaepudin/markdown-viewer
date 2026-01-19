@@ -116,9 +116,26 @@ struct WebPreviewView: NSViewRepresentable {
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
             let scrollSpyJS = """
             (function() {
-                let ticking = false;
+                let lastActiveId = '';
+                let lastUpdate = 0;
+                let scheduled = false;
+                const THROTTLE_MS = 100;  // Throttle to 100ms
 
                 function updateActiveHeading() {
+                    const now = Date.now();
+                    if (now - lastUpdate < THROTTLE_MS) {
+                        // Schedule for later if not already scheduled
+                        if (!scheduled) {
+                            scheduled = true;
+                            setTimeout(function() {
+                                scheduled = false;
+                                updateActiveHeading();
+                            }, THROTTLE_MS - (now - lastUpdate));
+                        }
+                        return;
+                    }
+                    lastUpdate = now;
+
                     const headings = document.querySelectorAll('h1, h2, h3, h4, h5, h6');
                     let activeId = '';
                     const scrollTop = window.scrollY || document.documentElement.scrollTop;
@@ -138,18 +155,15 @@ struct WebPreviewView: NSViewRepresentable {
                         activeId = headings[0].id || '';
                     }
 
-                    window.webkit.messageHandlers.scrollSpy.postMessage(activeId);
+                    // Only send message if activeId changed (avoid duplicate updates)
+                    if (activeId !== lastActiveId) {
+                        lastActiveId = activeId;
+                        window.webkit.messageHandlers.scrollSpy.postMessage(activeId);
+                    }
                 }
 
-                window.addEventListener('scroll', function() {
-                    if (!ticking) {
-                        window.requestAnimationFrame(function() {
-                            updateActiveHeading();
-                            ticking = false;
-                        });
-                        ticking = true;
-                    }
-                });
+                // Use passive listener for better scroll performance
+                window.addEventListener('scroll', updateActiveHeading, { passive: true });
 
                 // Initial check
                 setTimeout(updateActiveHeading, 100);

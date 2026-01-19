@@ -172,61 +172,19 @@ struct Heading: Identifiable, Equatable {
 
 // MARK: - App State
 class AppState: ObservableObject {
-    @Published var markdownText: String = """
-    # Welcome to Markdown Opener
-
-    A fast, native markdown viewer for macOS.
-
-    ## Features
-
-    - **Live preview** as you type
-    - Syntax highlighting for code blocks
-    - **Read/Edit toggle** - Press `Cmd+E`
-    - **Table of Contents** - Press `Cmd+T`
-    - **Search** - Press `Cmd+F`
-    - **Theme options** - Light, Dark, Sepia
-    - **Typography controls** - Font size, line height, width
-
-    ## Reading Comfort
-
-    This app uses research-based typography settings:
-
-    - **Line height 1.7** is optimal for most reading
-    - **Content width ~720px** (65-75 characters per line)
-    - **System font** for best legibility
-
-    ## Code Example
-
-    ```swift
-    func greet(name: String) -> String {
-        return "Hello, \\(name)!"
+    // Raw markdown text (updates immediately for responsive editing)
+    @Published var markdownText: String = "" {
+        didSet {
+            scheduleRenderUpdate()
+            scheduleTOCUpdate()
+        }
     }
-    ```
 
-    ```python
-    def fibonacci(n):
-        if n <= 1:
-            return n
-        return fibonacci(n-1) + fibonacci(n-2)
-    ```
+    // Debounced markdown for rendering (updates after 150ms pause)
+    @Published var debouncedMarkdown: String = ""
 
-    ## Keyboard Shortcuts
-
-    | Shortcut | Action |
-    |----------|--------|
-    | ⌘E | Toggle Read/Edit |
-    | ⌘T | Toggle TOC |
-    | ⌘F | Search |
-    | ⌘+ | Increase font |
-    | ⌘- | Decrease font |
-
-    ## Tips
-
-    - Click any heading in the TOC to jump to it
-    - Use Sepia theme for reduced eye strain
-    - Adjust line height for comfortable reading
-    - Links open in your default browser
-    """
+    // Cached headings for TOC (updates after 200ms pause)
+    @Published var headings: [Heading] = []
 
     @Published var currentFileURL: URL?
     @Published var windowTitle: String = "Markdown Opener"
@@ -241,9 +199,130 @@ class AppState: ObservableObject {
     @Published var scrollToHeadingId: String? = nil
     @Published var searchQuery: String = ""
 
-    // Computed: Extract headings from markdown for TOC
-    var headings: [Heading] {
-        let lines = markdownText.components(separatedBy: .newlines)
+    // MARK: - Performance: Debounce timers
+    private var renderDebounceTimer: DispatchWorkItem?
+    private var tocDebounceTimer: DispatchWorkItem?
+    private var lastMarkdownHash: Int = 0
+
+    // Debounce delay in milliseconds
+    private let renderDebounceDelay: Double = 0.15  // 150ms for render
+    private let tocDebounceDelay: Double = 0.20     // 200ms for TOC
+
+    init() {
+        // Set default content
+        let defaultContent = """
+        # Welcome to Markdown Opener
+
+        A fast, native markdown viewer for macOS.
+
+        ## Features
+
+        - **Live preview** as you type
+        - Syntax highlighting for code blocks
+        - **Read/Edit toggle** - Press `Cmd+E`
+        - **Table of Contents** - Press `Cmd+T`
+        - **Search** - Press `Cmd+F`
+        - **Theme options** - Light, Dark, Sepia
+        - **Typography controls** - Font size, line height, width
+
+        ## Reading Comfort
+
+        This app uses research-based typography settings:
+
+        - **Line height 1.7** is optimal for most reading
+        - **Content width ~720px** (65-75 characters per line)
+        - **System font** for best legibility
+
+        ## Code Example
+
+        ```swift
+        func greet(name: String) -> String {
+            return "Hello, \\(name)!"
+        }
+        ```
+
+        ```python
+        def fibonacci(n):
+            if n <= 1:
+                return n
+            return fibonacci(n-1) + fibonacci(n-2)
+        ```
+
+        ## Keyboard Shortcuts
+
+        | Shortcut | Action |
+        |----------|--------|
+        | ⌘E | Toggle Read/Edit |
+        | ⌘T | Toggle TOC |
+        | ⌘F | Search |
+        | ⌘+ | Increase font |
+        | ⌘- | Decrease font |
+
+        ## Tips
+
+        - Click any heading in the TOC to jump to it
+        - Use Sepia theme for reduced eye strain
+        - Adjust line height for comfortable reading
+        - Links open in your default browser
+        """
+        self.markdownText = defaultContent
+        self.debouncedMarkdown = defaultContent
+        self.headings = Self.extractHeadings(from: defaultContent)
+    }
+
+    // MARK: - Debounced Render Update
+    private func scheduleRenderUpdate() {
+        // Cancel previous timer
+        renderDebounceTimer?.cancel()
+
+        // In read mode, update immediately for instant feedback when switching modes
+        // In edit mode, debounce to avoid excessive re-renders while typing
+        let delay = viewMode == .edit ? renderDebounceDelay : 0
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            let newHash = self.markdownText.hashValue
+            // Only update if content actually changed
+            if newHash != self.lastMarkdownHash {
+                self.lastMarkdownHash = newHash
+                DispatchQueue.main.async {
+                    self.debouncedMarkdown = self.markdownText
+                }
+            }
+        }
+
+        renderDebounceTimer = workItem
+
+        if delay > 0 {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: workItem)
+        } else {
+            workItem.perform()
+        }
+    }
+
+    // MARK: - Debounced TOC Update
+    private func scheduleTOCUpdate() {
+        // Cancel previous timer
+        tocDebounceTimer?.cancel()
+
+        let workItem = DispatchWorkItem { [weak self] in
+            guard let self = self else { return }
+            let newHeadings = Self.extractHeadings(from: self.markdownText)
+            // Only update if headings changed
+            if newHeadings != self.headings {
+                DispatchQueue.main.async {
+                    self.headings = newHeadings
+                }
+            }
+        }
+
+        tocDebounceTimer = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + tocDebounceDelay, execute: workItem)
+    }
+
+    // MARK: - Static heading extraction (for caching)
+    private static func extractHeadings(from text: String) -> [Heading] {
+        let lines = text.components(separatedBy: .newlines)
         var result: [Heading] = []
 
         for line in lines {
@@ -270,6 +349,10 @@ class AppState: ObservableObject {
 
     func toggleViewMode() {
         viewMode = viewMode == .edit ? .read : .edit
+        // Force immediate update when switching to read mode
+        if viewMode == .read {
+            debouncedMarkdown = markdownText
+        }
     }
 
     func scrollToHeading(_ heading: Heading) {
@@ -290,7 +373,13 @@ class AppState: ObservableObject {
         }
 
         do {
-            markdownText = try String(contentsOf: url, encoding: .utf8)
+            let content = try String(contentsOf: url, encoding: .utf8)
+            // Update both immediately for file opens (not typing)
+            markdownText = content
+            debouncedMarkdown = content
+            headings = Self.extractHeadings(from: content)
+            lastMarkdownHash = content.hashValue
+
             currentFileURL = url
             windowTitle = url.lastPathComponent
 

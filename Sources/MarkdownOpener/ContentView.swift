@@ -232,7 +232,7 @@ struct ContentView: View {
     private var mainContent: some View {
         if appState.viewMode == .read {
             WebPreviewView(
-                markdown: appState.markdownText,
+                markdown: appState.debouncedMarkdown,  // Use debounced for performance
                 theme: appState.theme,
                 fontSize: appState.fontSize,
                 contentWidth: appState.contentWidth,
