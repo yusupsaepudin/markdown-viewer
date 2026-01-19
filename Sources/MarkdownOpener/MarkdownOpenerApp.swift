@@ -199,12 +199,16 @@ class AppState: ObservableObject {
     @Published var scrollToHeadingId: String? = nil
     @Published var searchQuery: String = ""
 
-    // MARK: - Performance: Debounce timers
+    // MARK: - Performance: Debounce timers and background queues
     private var renderDebounceTimer: DispatchWorkItem?
     private var tocDebounceTimer: DispatchWorkItem?
     private var lastMarkdownHash: Int = 0
+    private var lastTOCHash: Int = 0
 
-    // Debounce delay in milliseconds
+    // Background queue for parsing (QoS: userInitiated for responsive updates)
+    private let parsingQueue = DispatchQueue(label: "com.markdownopener.parsing", qos: .userInitiated)
+
+    // Debounce delay in seconds
     private let renderDebounceDelay: Double = 0.15  // 150ms for render
     private let tocDebounceDelay: Double = 0.20     // 200ms for TOC
 
@@ -268,6 +272,8 @@ class AppState: ObservableObject {
         self.markdownText = defaultContent
         self.debouncedMarkdown = defaultContent
         self.headings = Self.extractHeadings(from: defaultContent)
+        self.lastMarkdownHash = defaultContent.hashValue
+        self.lastTOCHash = defaultContent.hashValue
     }
 
     // MARK: - Debounced Render Update
@@ -300,18 +306,35 @@ class AppState: ObservableObject {
         }
     }
 
-    // MARK: - Debounced TOC Update
+    // MARK: - Debounced TOC Update (Background Thread)
     private func scheduleTOCUpdate() {
         // Cancel previous timer
         tocDebounceTimer?.cancel()
 
+        // Capture current text for background processing
+        let currentText = self.markdownText
+        let textHash = currentText.hashValue
+
+        // Skip if text hasn't changed
+        guard textHash != lastTOCHash else { return }
+
         let workItem = DispatchWorkItem { [weak self] in
             guard let self = self else { return }
-            let newHeadings = Self.extractHeadings(from: self.markdownText)
-            // Only update if headings changed
-            if newHeadings != self.headings {
+
+            // Parse on background thread
+            self.parsingQueue.async {
+                let newHeadings = Self.extractHeadings(from: currentText)
+
+                // Update on main thread
                 DispatchQueue.main.async {
-                    self.headings = newHeadings
+                    // Double-check we still need this update
+                    guard self.lastTOCHash != textHash else { return }
+                    self.lastTOCHash = textHash
+
+                    // Only update if headings changed
+                    if newHeadings != self.headings {
+                        self.headings = newHeadings
+                    }
                 }
             }
         }
@@ -374,11 +397,27 @@ class AppState: ObservableObject {
 
         do {
             let content = try String(contentsOf: url, encoding: .utf8)
+            let contentHash = content.hashValue
+
             // Update both immediately for file opens (not typing)
             markdownText = content
             debouncedMarkdown = content
-            headings = Self.extractHeadings(from: content)
-            lastMarkdownHash = content.hashValue
+            lastMarkdownHash = contentHash
+            lastTOCHash = contentHash
+
+            // Parse headings on background for large files, sync for small files
+            if content.count > 50000 {
+                // Large file: parse on background thread
+                parsingQueue.async { [weak self] in
+                    let newHeadings = Self.extractHeadings(from: content)
+                    DispatchQueue.main.async {
+                        self?.headings = newHeadings
+                    }
+                }
+            } else {
+                // Small file: parse immediately
+                headings = Self.extractHeadings(from: content)
+            }
 
             currentFileURL = url
             windowTitle = url.lastPathComponent

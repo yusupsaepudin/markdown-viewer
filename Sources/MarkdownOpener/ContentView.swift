@@ -248,18 +248,18 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Editable Markdown View
+    // MARK: - Editable Markdown View (High Performance NSTextView)
     private var editableMarkdownView: some View {
-        ScrollView {
-            TextEditor(text: $appState.markdownText)
-                .font(.system(size: appState.fontSize, design: .monospaced))
-                .lineSpacing((appState.lineHeight.value - 1) * appState.fontSize)
-                .scrollContentBackground(.hidden)
-                .frame(maxWidth: appState.contentWidth)
-                .frame(maxWidth: .infinity)
-                .padding(.horizontal, 24)
-                .padding(.vertical, 16)
-        }
+        PerformantTextEditor(
+            text: $appState.markdownText,
+            fontSize: appState.fontSize,
+            lineHeight: appState.lineHeight.value,
+            theme: appState.theme
+        )
+        .padding(.horizontal, 24)
+        .padding(.vertical, 16)
+        .frame(maxWidth: appState.contentWidth)
+        .frame(maxWidth: .infinity)
         .background(backgroundColor)
     }
 
