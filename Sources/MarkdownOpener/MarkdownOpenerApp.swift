@@ -347,9 +347,22 @@ class AppState: ObservableObject {
     private static func extractHeadings(from text: String) -> [Heading] {
         let lines = text.components(separatedBy: .newlines)
         var result: [Heading] = []
+        var inCodeBlock = false
 
         for line in lines {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // Track fenced code block state
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                inCodeBlock = !inCodeBlock
+                continue
+            }
+
+            // Skip content inside code blocks
+            if inCodeBlock {
+                continue
+            }
+
             if trimmed.hasPrefix("#") {
                 var level = 0
                 for char in trimmed {
@@ -357,7 +370,13 @@ class AppState: ObservableObject {
                     else { break }
                 }
                 if level >= 1 && level <= 6 {
-                    let text = String(trimmed.dropFirst(level)).trimmingCharacters(in: .whitespaces)
+                    let afterHashes = String(trimmed.dropFirst(level))
+                    // Valid markdown heading must have space after # symbols
+                    // (e.g., "# Heading" not "#1 item")
+                    guard afterHashes.hasPrefix(" ") || afterHashes.isEmpty else {
+                        continue
+                    }
+                    let text = afterHashes.trimmingCharacters(in: .whitespaces)
                     if !text.isEmpty {
                         let id = text.lowercased()
                             .replacingOccurrences(of: " ", with: "-")
