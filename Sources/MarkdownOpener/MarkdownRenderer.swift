@@ -23,7 +23,7 @@ struct MarkdownRenderer {
             <meta charset="utf-8">
             <meta name="viewport" content="width=device-width, initial-scale=1">
             <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/\(highlightTheme).min.css">
-            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js" defer></script>
             <style>
                 * {
                     box-sizing: border-box;
@@ -85,7 +85,7 @@ struct MarkdownRenderer {
                     font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
                     \(themeCSS.inlineCode)
                 }
-                /* Code blocks */
+                /* Code blocks - with CSS containment for performance */
                 pre {
                     padding: 14px 16px;
                     overflow: auto;
@@ -93,6 +93,9 @@ struct MarkdownRenderer {
                     font-size: 87%;
                     line-height: 1.45;
                     margin: 0.75em 0;
+                    contain: content;
+                    content-visibility: auto;
+                    contain-intrinsic-size: auto 200px;
                     \(themeCSS.codeBlock)
                 }
                 pre code {
@@ -100,12 +103,17 @@ struct MarkdownRenderer {
                     background: transparent !important;
                     padding: 0;
                 }
+                /* Code block not yet highlighted */
+                pre code:not(.hljs) {
+                    opacity: 0.9;
+                }
                 /* Blockquotes */
                 blockquote {
                     padding: 0.5em 1em;
                     margin: 0.75em 0;
                     border-left: 3px solid;
                     border-radius: 0 4px 4px 0;
+                    contain: content;
                     \(themeCSS.blockquote)
                 }
                 blockquote p {
@@ -130,12 +138,15 @@ struct MarkdownRenderer {
                 li > ul, li > ol {
                     margin: 0.15em 0 0.15em 0;
                 }
-                /* Tables */
+                /* Tables - with CSS containment */
                 table {
                     border-collapse: collapse;
                     margin: 0.75em 0;
                     width: 100%;
                     font-size: 94%;
+                    contain: content;
+                    content-visibility: auto;
+                    contain-intrinsic-size: auto 100px;
                     \(themeCSS.table)
                 }
                 table th, table td {
@@ -155,12 +166,14 @@ struct MarkdownRenderer {
                     margin: 1.5em 0;
                     \(themeCSS.hr)
                 }
-                /* Images */
+                /* Images - lazy loading with containment */
                 img {
                     max-width: 100%;
                     height: auto;
                     border-radius: 6px;
                     margin: 0.75em 0;
+                    contain: content;
+                    content-visibility: auto;
                 }
                 strong {
                     font-weight: 600;
@@ -176,11 +189,71 @@ struct MarkdownRenderer {
                     0% { background-color: rgba(88, 166, 255, 0.25); }
                     100% { background-color: transparent; }
                 }
+                /* Sections for virtual scrolling optimization */
+                .md-section {
+                    contain: layout style;
+                    content-visibility: auto;
+                    contain-intrinsic-size: auto 500px;
+                }
             </style>
         </head>
         <body>
             \(bodyHTML)
-            <script>hljs.highlightAll();</script>
+            <script>
+            // Lazy syntax highlighting using Intersection Observer
+            (function() {
+                'use strict';
+
+                // Wait for hljs to load
+                function initLazyHighlight() {
+                    if (typeof hljs === 'undefined') {
+                        setTimeout(initLazyHighlight, 50);
+                        return;
+                    }
+
+                    const codeBlocks = document.querySelectorAll('pre code:not(.hljs)');
+                    if (codeBlocks.length === 0) return;
+
+                    // For small documents, highlight all immediately
+                    if (codeBlocks.length <= 5) {
+                        codeBlocks.forEach(block => hljs.highlightElement(block));
+                        return;
+                    }
+
+                    // For larger documents, use Intersection Observer
+                    const observer = new IntersectionObserver((entries) => {
+                        entries.forEach(entry => {
+                            if (entry.isIntersecting) {
+                                const block = entry.target;
+                                if (!block.classList.contains('hljs')) {
+                                    hljs.highlightElement(block);
+                                }
+                                observer.unobserve(block);
+                            }
+                        });
+                    }, {
+                        rootMargin: '200px 0px',  // Start highlighting 200px before visible
+                        threshold: 0
+                    });
+
+                    // Highlight first 3 blocks immediately, observe the rest
+                    codeBlocks.forEach((block, index) => {
+                        if (index < 3) {
+                            hljs.highlightElement(block);
+                        } else {
+                            observer.observe(block);
+                        }
+                    });
+                }
+
+                // Start when DOM is ready
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', initLazyHighlight);
+                } else {
+                    initLazyHighlight();
+                }
+            })();
+            </script>
         </body>
         </html>
         """
@@ -319,7 +392,8 @@ struct HTMLVisitor: MarkupVisitor {
     mutating func visitImage(_ image: Image) -> String {
         let src = image.source ?? ""
         let alt = image.plainText
-        return "<img src=\"\(escapeHTML(src))\" alt=\"\(escapeHTML(alt))\">"
+        // Add loading="lazy" and decoding="async" for performance
+        return "<img src=\"\(escapeHTML(src))\" alt=\"\(escapeHTML(alt))\" loading=\"lazy\" decoding=\"async\">"
     }
 
     mutating func visitUnorderedList(_ unorderedList: UnorderedList) -> String {
