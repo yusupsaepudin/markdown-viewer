@@ -2,6 +2,81 @@ import Foundation
 import Markdown
 
 struct MarkdownRenderer {
+    /// Pre-process markdown to escape HTML-like content inside code blocks
+    /// Note: Nested code fences (``` inside ```markdown) are a CommonMark limitation
+    /// and should be avoided in source documents. Use more backticks for outer fence.
+    private static func preprocessCodeBlocks(_ markdown: String) -> String {
+        let lines = markdown.components(separatedBy: "\n")
+        var result: [String] = []
+
+        var inCodeBlock = false
+        var fencePattern = ""
+
+        for line in lines {
+            let trimmed = line.trimmingCharacters(in: .whitespaces)
+
+            // Check for code fence
+            if trimmed.hasPrefix("```") || trimmed.hasPrefix("~~~") {
+                let fenceChar = trimmed.first!
+                let fence = String(trimmed.prefix(while: { $0 == fenceChar }))
+
+                if !inCodeBlock {
+                    // Opening fence
+                    inCodeBlock = true
+                    fencePattern = fence
+                    result.append(line)
+                } else if fence.count >= fencePattern.count && trimmed.dropFirst(fence.count).trimmingCharacters(in: .whitespaces).isEmpty {
+                    // Closing fence (same or more chars, no content after)
+                    inCodeBlock = false
+                    fencePattern = ""
+                    result.append(line)
+                } else {
+                    // Inside code block - escape the fence
+                    let escaped = escapeCodeBlockContent(line)
+                    result.append(escaped)
+                }
+            } else if inCodeBlock {
+                // Inside code block - escape HTML-like content
+                let escaped = escapeCodeBlockContent(line)
+                result.append(escaped)
+            } else {
+                result.append(line)
+            }
+        }
+
+        var finalResult = result.joined(separator: "\n")
+
+        // Remove trailing newline if original didn't have one
+        if !markdown.hasSuffix("\n") && finalResult.hasSuffix("\n") {
+            finalResult.removeLast()
+        }
+
+        return finalResult
+    }
+
+    /// Escape content inside code blocks (HTML tags and nested fences)
+    private static func escapeCodeBlockContent(_ line: String) -> String {
+        var escaped = line
+            // Escape code fences
+            .replacingOccurrences(of: "```", with: "⸢⸢⸢")
+            .replacingOccurrences(of: "~~~", with: "⸤⸤⸤")
+
+        // Escape HTML-like tags
+        escaped = escaped.replacingOccurrences(of: "<([a-zA-Z/])", with: "‹$1", options: .regularExpression)
+        escaped = escaped.replacingOccurrences(of: "([a-zA-Z\"'])>", with: "$1›", options: .regularExpression)
+
+        return escaped
+    }
+
+    /// Post-process HTML to restore escaped characters from placeholders
+    private static func restorePlaceholders(_ html: String) -> String {
+        html
+            .replacingOccurrences(of: "‹", with: "&lt;")
+            .replacingOccurrences(of: "›", with: "&gt;")
+            .replacingOccurrences(of: "⸢⸢⸢", with: "```")
+            .replacingOccurrences(of: "⸤⸤⸤", with: "~~~")
+    }
+
     static func render(
         _ markdown: String,
         theme: AppTheme,
@@ -9,9 +84,10 @@ struct MarkdownRenderer {
         contentWidth: CGFloat,
         lineHeight: CGFloat
     ) -> String {
-        let document = Document(parsing: markdown)
+        let preprocessed = preprocessCodeBlocks(markdown)
+        let document = Document(parsing: preprocessed)
         var htmlVisitor = HTMLVisitor()
-        let bodyHTML = htmlVisitor.visit(document)
+        let bodyHTML = restorePlaceholders(htmlVisitor.visit(document))
 
         let themeCSS = getThemeCSS(theme)
         let highlightTheme = getHighlightTheme(theme)
@@ -447,6 +523,16 @@ struct HTMLVisitor: MarkupVisitor {
 
     mutating func visitStrikethrough(_ strikethrough: Strikethrough) -> String {
         "<del>\(defaultVisit(strikethrough))</del>"
+    }
+
+    mutating func visitHTMLBlock(_ html: HTMLBlock) -> String {
+        // Display raw HTML as escaped text so it renders literally
+        "<pre><code>\(escapeHTML(html.rawHTML))</code></pre>\n"
+    }
+
+    mutating func visitInlineHTML(_ html: InlineHTML) -> String {
+        // Escape inline HTML so it displays as literal text
+        escapeHTML(html.rawHTML)
     }
 
     private func escapeHTML(_ string: String) -> String {
