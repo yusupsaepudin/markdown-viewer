@@ -6,45 +6,98 @@ struct ContentView: View {
     @State private var activeHeadingId: String? = nil
     @State private var isSearchVisible = false
     @State private var searchText = ""
+    @State private var showFocusModeHint = false
     @FocusState private var isSearchFocused: Bool
 
+    // Computed properties for focus mode
+    private var shouldShowToolbar: Bool {
+        isToolbarVisible && !appState.focusMode
+    }
+
+    private var shouldShowTOC: Bool {
+        appState.showTOC && !appState.focusMode
+    }
+
+    private var shouldShowStatusBar: Bool {
+        !appState.focusMode
+    }
+
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                // Table of Contents sidebar
-                if appState.showTOC {
-                    tocSidebar
-                        .transition(.move(edge: .leading).combined(with: .opacity))
+        ZStack {
+            VStack(spacing: 0) {
+                HStack(spacing: 0) {
+                    // Table of Contents sidebar
+                    if shouldShowTOC {
+                        tocSidebar
+                            .transition(.move(edge: .leading).combined(with: .opacity))
+                    }
+
+                    // Main content area
+                    ZStack(alignment: .top) {
+                        mainContent
+                            .padding(.top, shouldShowToolbar ? 56 : (appState.focusMode ? 40 : 0))
+                            .padding(.bottom, appState.focusMode ? 40 : 0)
+
+                        if shouldShowToolbar {
+                            toolbar
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+
+                        // Search overlay (hidden in focus mode)
+                        if isSearchVisible && !appState.focusMode {
+                            searchOverlay
+                                .transition(.move(edge: .top).combined(with: .opacity))
+                        }
+                    }
                 }
 
-                // Main content area
-                ZStack(alignment: .top) {
-                    mainContent
-                        .padding(.top, isToolbarVisible ? 56 : 0)
-
-                    if isToolbarVisible {
-                        toolbar
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
-
-                    // Search overlay
-                    if isSearchVisible {
-                        searchOverlay
-                            .transition(.move(edge: .top).combined(with: .opacity))
-                    }
+                // Status bar (hidden in focus mode)
+                if shouldShowStatusBar {
+                    documentStatusBar
                 }
             }
 
-            // Status bar
-            documentStatusBar
+            // Focus mode hint overlay
+            if appState.focusMode && showFocusModeHint {
+                focusModeHint
+                    .transition(.opacity)
+            }
         }
         .frame(minWidth: 700, minHeight: 500)
-        .background(backgroundColor)
+        .background(appState.focusMode ? focusModeBackground : backgroundColor)
         .animation(.easeInOut(duration: 0.2), value: isToolbarVisible)
         .animation(.easeInOut(duration: 0.25), value: appState.showTOC)
         .animation(.easeInOut(duration: 0.15), value: isSearchVisible)
+        .animation(.easeInOut(duration: 0.3), value: appState.focusMode)
         .onReceive(NotificationCenter.default.publisher(for: .toggleSearch)) { _ in
-            toggleSearch()
+            if !appState.focusMode {
+                toggleSearch()
+            }
+        }
+        .onReceive(NotificationCenter.default.publisher(for: .toggleFocusMode)) { _ in
+            appState.toggleFocusMode()
+        }
+        .onChange(of: appState.focusMode) { isFocusMode in
+            if isFocusMode {
+                // Show hint when entering focus mode
+                showFocusModeHint = true
+                // Auto-hide hint after 3 seconds
+                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                    withAnimation(.easeOut(duration: 0.5)) {
+                        showFocusModeHint = false
+                    }
+                }
+            }
+        }
+        .onAppear {
+            // Set up escape key handler for focus mode
+            NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+                if event.keyCode == 53 && appState.focusMode { // 53 = Escape key
+                    appState.toggleFocusMode()
+                    return nil // Consume the event
+                }
+                return event
+            }
         }
     }
 
@@ -552,9 +605,58 @@ struct ContentView: View {
         case .sepia: return Color(red: 0.5, green: 0.4, blue: 0.3)
         }
     }
+
+    // MARK: - Focus Mode
+    private var focusModeBackground: Color {
+        switch appState.theme {
+        case .light: return Color(red: 0.96, green: 0.96, blue: 0.96)
+        case .dark: return Color(red: 0.08, green: 0.08, blue: 0.09)
+        case .sepia: return Color(red: 0.94, green: 0.91, blue: 0.84)
+        }
+    }
+
+    private var focusModeHint: some View {
+        VStack {
+            Spacer()
+            HStack {
+                Spacer()
+                HStack(spacing: 8) {
+                    Image(systemName: "escape")
+                        .font(.system(size: 11, weight: .medium))
+                    Text("Press Esc to exit focus mode")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .foregroundColor(focusModeHintColor)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 8)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(focusModeHintBackground)
+                )
+                .padding(20)
+            }
+        }
+    }
+
+    private var focusModeHintColor: Color {
+        switch appState.theme {
+        case .light: return Color(red: 0.5, green: 0.5, blue: 0.5)
+        case .dark: return Color(red: 0.5, green: 0.5, blue: 0.5)
+        case .sepia: return Color(red: 0.55, green: 0.45, blue: 0.35)
+        }
+    }
+
+    private var focusModeHintBackground: Color {
+        switch appState.theme {
+        case .light: return Color.black.opacity(0.06)
+        case .dark: return Color.white.opacity(0.08)
+        case .sepia: return Color.brown.opacity(0.1)
+        }
+    }
 }
 
-// Notification for search toggle
+// Notification names
 extension Notification.Name {
     static let toggleSearch = Notification.Name("toggleSearch")
+    static let toggleFocusMode = Notification.Name("toggleFocusMode")
 }

@@ -60,6 +60,11 @@ struct MarkdownOpenerApp: App {
                 }
                 .keyboardShortcut("t", modifiers: .command)
 
+                Button(appState.focusMode ? "Exit Focus Mode" : "Enter Focus Mode") {
+                    appState.toggleFocusMode()
+                }
+                .keyboardShortcut("f", modifiers: [.command, .shift])
+
                 Divider()
 
                 Menu("Theme") {
@@ -204,6 +209,7 @@ class AppState: ObservableObject {
     @Published var showTOC: Bool = false
     @Published var scrollToHeadingId: String? = nil
     @Published var searchQuery: String = ""
+    @Published var focusMode: Bool = false
 
     // MARK: - Document Statistics (computed)
     var wordCount: Int {
@@ -293,6 +299,7 @@ class AppState: ObservableObject {
         - **Read/Edit toggle** - Press `Cmd+E`
         - **Table of Contents** - Press `Cmd+T`
         - **Search** - Press `Cmd+F`
+        - **Focus Mode** - Press `Shift+Cmd+F` for distraction-free writing
         - **Theme options** - Light, Dark, Sepia
         - **Typography controls** - Font size, line height, width
 
@@ -326,8 +333,10 @@ class AppState: ObservableObject {
         | ⌘E | Toggle Read/Edit |
         | ⌘T | Toggle TOC |
         | ⌘F | Search |
+        | ⇧⌘F | Focus Mode |
         | ⌘+ | Increase font |
         | ⌘- | Decrease font |
+        | Esc | Exit Focus Mode |
 
         ## Tips
 
@@ -534,6 +543,16 @@ class AppState: ObservableObject {
             debouncedMarkdown = markdownText
         }
         saveSettings()
+    }
+
+    func toggleFocusMode() {
+        withAnimation(.easeInOut(duration: 0.3)) {
+            focusMode.toggle()
+        }
+        // Auto-switch to edit mode when entering focus mode (for writing)
+        if focusMode && viewMode == .read {
+            viewMode = .edit
+        }
     }
 
     func scrollToHeading(_ heading: Heading) {
