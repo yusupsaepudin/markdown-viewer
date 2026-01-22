@@ -9,29 +9,34 @@ struct ContentView: View {
     @FocusState private var isSearchFocused: Bool
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Table of Contents sidebar
-            if appState.showTOC {
-                tocSidebar
-                    .transition(.move(edge: .leading).combined(with: .opacity))
-            }
-
-            // Main content area
-            ZStack(alignment: .top) {
-                mainContent
-                    .padding(.top, isToolbarVisible ? 56 : 0)
-
-                if isToolbarVisible {
-                    toolbar
-                        .transition(.move(edge: .top).combined(with: .opacity))
+        VStack(spacing: 0) {
+            HStack(spacing: 0) {
+                // Table of Contents sidebar
+                if appState.showTOC {
+                    tocSidebar
+                        .transition(.move(edge: .leading).combined(with: .opacity))
                 }
 
-                // Search overlay
-                if isSearchVisible {
-                    searchOverlay
-                        .transition(.move(edge: .top).combined(with: .opacity))
+                // Main content area
+                ZStack(alignment: .top) {
+                    mainContent
+                        .padding(.top, isToolbarVisible ? 56 : 0)
+
+                    if isToolbarVisible {
+                        toolbar
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+
+                    // Search overlay
+                    if isSearchVisible {
+                        searchOverlay
+                            .transition(.move(edge: .top).combined(with: .opacity))
+                    }
                 }
             }
+
+            // Status bar
+            documentStatusBar
         }
         .frame(minWidth: 700, minHeight: 500)
         .background(backgroundColor)
@@ -269,6 +274,7 @@ struct ContentView: View {
             // TOC toggle
             Button {
                 withAnimation { appState.showTOC.toggle() }
+                appState.saveSettings()
             } label: {
                 Image(systemName: appState.showTOC ? "list.bullet.indent" : "list.bullet")
                     .font(.system(size: 13, weight: .medium))
@@ -310,6 +316,7 @@ struct ContentView: View {
                         withAnimation(.easeInOut(duration: 0.15)) {
                             appState.theme = theme
                         }
+                        appState.saveSettings()
                     } label: {
                         HStack {
                             Image(systemName: iconForTheme(theme))
@@ -334,6 +341,7 @@ struct ContentView: View {
                 ForEach(LineHeight.allCases, id: \.self) { height in
                     Button {
                         appState.lineHeight = height
+                        appState.saveSettings()
                     } label: {
                         HStack {
                             Text(height.label)
@@ -356,6 +364,7 @@ struct ContentView: View {
             HStack(spacing: 4) {
                 Button {
                     appState.fontSize = max(12, appState.fontSize - 1)
+                    appState.saveSettings()
                 } label: {
                     Image(systemName: "minus")
                         .font(.system(size: 10, weight: .bold))
@@ -371,6 +380,7 @@ struct ContentView: View {
 
                 Button {
                     appState.fontSize = min(24, appState.fontSize + 1)
+                    appState.saveSettings()
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 10, weight: .bold))
@@ -382,25 +392,25 @@ struct ContentView: View {
 
             // Width
             Menu {
-                Button { appState.contentWidth = 560 } label: {
+                Button { appState.contentWidth = 560; appState.saveSettings() } label: {
                     HStack {
                         Text("Narrow (560)")
                         if appState.contentWidth == 560 { Spacer(); Image(systemName: "checkmark") }
                     }
                 }
-                Button { appState.contentWidth = 720 } label: {
+                Button { appState.contentWidth = 720; appState.saveSettings() } label: {
                     HStack {
                         Text("Medium (720)")
                         if appState.contentWidth == 720 { Spacer(); Image(systemName: "checkmark") }
                     }
                 }
-                Button { appState.contentWidth = 900 } label: {
+                Button { appState.contentWidth = 900; appState.saveSettings() } label: {
                     HStack {
                         Text("Wide (900)")
                         if appState.contentWidth == 900 { Spacer(); Image(systemName: "checkmark") }
                     }
                 }
-                Button { appState.contentWidth = 1100 } label: {
+                Button { appState.contentWidth = 1100; appState.saveSettings() } label: {
                     HStack {
                         Text("Full (1100)")
                         if appState.contentWidth == 1100 { Spacer(); Image(systemName: "checkmark") }
@@ -471,6 +481,75 @@ struct ContentView: View {
         case .light: return Color(red: 1, green: 1, blue: 1).opacity(0.95)
         case .dark: return Color(red: 0.18, green: 0.18, blue: 0.20).opacity(0.95)
         case .sepia: return Color(red: 0.99, green: 0.96, blue: 0.90).opacity(0.95)
+        }
+    }
+
+    // MARK: - Status Bar
+    private var documentStatusBar: some View {
+        HStack(spacing: 16) {
+            // Word count
+            HStack(spacing: 4) {
+                Image(systemName: "text.word.spacing")
+                    .font(.system(size: 10))
+                Text("\(appState.wordCount) words")
+            }
+
+            Divider()
+                .frame(height: 10)
+
+            // Character count
+            HStack(spacing: 4) {
+                Image(systemName: "character")
+                    .font(.system(size: 10))
+                Text("\(appState.characterCount) chars")
+            }
+
+            Divider()
+                .frame(height: 10)
+
+            // Reading time
+            HStack(spacing: 4) {
+                Image(systemName: "clock")
+                    .font(.system(size: 10))
+                Text(appState.readingTime)
+            }
+
+            Spacer()
+
+            // Current mode indicator
+            Text(appState.viewMode == .read ? "Reading" : "Editing")
+                .foregroundColor(.secondary)
+
+            // File name if open
+            if let url = appState.currentFileURL {
+                Divider()
+                    .frame(height: 10)
+                Text(url.lastPathComponent)
+                    .foregroundColor(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+        }
+        .font(.system(size: 11))
+        .foregroundColor(documentStatusBarTextColor)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 6)
+        .background(documentStatusBarBackground)
+    }
+
+    private var documentStatusBarBackground: Color {
+        switch appState.theme {
+        case .light: return Color(red: 0.95, green: 0.95, blue: 0.95)
+        case .dark: return Color(red: 0.13, green: 0.13, blue: 0.14)
+        case .sepia: return Color(red: 0.93, green: 0.90, blue: 0.83)
+        }
+    }
+
+    private var documentStatusBarTextColor: Color {
+        switch appState.theme {
+        case .light: return Color(red: 0.4, green: 0.4, blue: 0.4)
+        case .dark: return Color(red: 0.6, green: 0.6, blue: 0.6)
+        case .sepia: return Color(red: 0.5, green: 0.4, blue: 0.3)
         }
     }
 }

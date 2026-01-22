@@ -18,6 +18,9 @@ struct MarkdownOpenerApp: App {
                     if let url = appDelegate.pendingFileURL {
                         appState.openFile(url)
                         appDelegate.pendingFileURL = nil
+                    } else {
+                        // Try to restore last opened file if no file was passed
+                        _ = appState.restoreLastOpenedFile()
                     }
                 }
         }
@@ -53,20 +56,21 @@ struct MarkdownOpenerApp: App {
                     withAnimation {
                         appState.showTOC.toggle()
                     }
+                    appState.saveSettings()
                 }
                 .keyboardShortcut("t", modifiers: .command)
 
                 Divider()
 
                 Menu("Theme") {
-                    Button("Light") { appState.theme = .light }
-                    Button("Dark") { appState.theme = .dark }
-                    Button("Sepia") { appState.theme = .sepia }
+                    Button("Light") { appState.theme = .light; appState.saveSettings() }
+                    Button("Dark") { appState.theme = .dark; appState.saveSettings() }
+                    Button("Sepia") { appState.theme = .sepia; appState.saveSettings() }
                 }
 
                 Menu("Line Height") {
                     ForEach(LineHeight.allCases, id: \.self) { height in
-                        Button(height.label) { appState.lineHeight = height }
+                        Button(height.label) { appState.lineHeight = height; appState.saveSettings() }
                     }
                 }
 
@@ -74,11 +78,13 @@ struct MarkdownOpenerApp: App {
 
                 Button("Increase Font Size") {
                     appState.fontSize = min(24, appState.fontSize + 1)
+                    appState.saveSettings()
                 }
                 .keyboardShortcut("+", modifiers: .command)
 
                 Button("Decrease Font Size") {
                     appState.fontSize = max(12, appState.fontSize - 1)
+                    appState.saveSettings()
                 }
                 .keyboardShortcut("-", modifiers: .command)
             }
@@ -189,7 +195,7 @@ class AppState: ObservableObject {
     @Published var currentFileURL: URL?
     @Published var windowTitle: String = "Markdown Opener"
 
-    // View settings - optimized defaults for reading
+    // View settings - optimized defaults for reading (persisted via @AppStorage in init)
     @Published var viewMode: ViewMode = .read
     @Published var theme: AppTheme = .dark
     @Published var fontSize: CGFloat = 17
@@ -198,6 +204,25 @@ class AppState: ObservableObject {
     @Published var showTOC: Bool = false
     @Published var scrollToHeadingId: String? = nil
     @Published var searchQuery: String = ""
+
+    // MARK: - Document Statistics (computed)
+    var wordCount: Int {
+        markdownText.split { $0.isWhitespace || $0.isNewline }.count
+    }
+
+    var characterCount: Int {
+        markdownText.count
+    }
+
+    var characterCountNoSpaces: Int {
+        markdownText.filter { !$0.isWhitespace && !$0.isNewline }.count
+    }
+
+    var readingTime: String {
+        let words = wordCount
+        let minutes = max(1, Int(ceil(Double(words) / 200.0)))
+        return minutes == 1 ? "1 min read" : "\(minutes) min read"
+    }
 
     // MARK: - Performance: Debounce timers and background queues
     private var renderDebounceTimer: DispatchWorkItem?
@@ -212,7 +237,49 @@ class AppState: ObservableObject {
     private let renderDebounceDelay: Double = 0.15  // 150ms for render
     private let tocDebounceDelay: Double = 0.20     // 200ms for TOC
 
+    // MARK: - UserDefaults Keys for State Persistence
+    private enum StorageKeys {
+        static let theme = "app.theme"
+        static let fontSize = "app.fontSize"
+        static let contentWidth = "app.contentWidth"
+        static let lineHeight = "app.lineHeight"
+        static let showTOC = "app.showTOC"
+        static let viewMode = "app.viewMode"
+        static let lastFileURL = "app.lastFileURL"
+        static let lastFileBookmark = "app.lastFileBookmark"
+    }
+
     init() {
+        // Restore persisted settings
+        let defaults = UserDefaults.standard
+
+        if let themeRaw = defaults.string(forKey: StorageKeys.theme),
+           let savedTheme = AppTheme(rawValue: themeRaw) {
+            self.theme = savedTheme
+        }
+
+        if defaults.object(forKey: StorageKeys.fontSize) != nil {
+            self.fontSize = CGFloat(defaults.double(forKey: StorageKeys.fontSize))
+        }
+
+        if defaults.object(forKey: StorageKeys.contentWidth) != nil {
+            self.contentWidth = CGFloat(defaults.double(forKey: StorageKeys.contentWidth))
+        }
+
+        if let lineHeightRaw = defaults.string(forKey: StorageKeys.lineHeight),
+           let savedLineHeight = LineHeight(rawValue: lineHeightRaw) {
+            self.lineHeight = savedLineHeight
+        }
+
+        if defaults.object(forKey: StorageKeys.showTOC) != nil {
+            self.showTOC = defaults.bool(forKey: StorageKeys.showTOC)
+        }
+
+        if let viewModeRaw = defaults.string(forKey: StorageKeys.viewMode),
+           let savedViewMode = ViewMode(rawValue: viewModeRaw) {
+            self.viewMode = savedViewMode
+        }
+
         // Set default content
         let defaultContent = """
         # Welcome to Markdown Opener
@@ -274,6 +341,77 @@ class AppState: ObservableObject {
         self.headings = Self.extractHeadings(from: defaultContent)
         self.lastMarkdownHash = defaultContent.hashValue
         self.lastTOCHash = defaultContent.hashValue
+
+        // Set up observers for persisting changes
+        setupPersistenceObservers()
+    }
+
+    // MARK: - Settings Persistence
+    private func setupPersistenceObservers() {
+        // We use didSet-style saving by calling saveSettings() in appropriate places
+    }
+
+    func saveSettings() {
+        let defaults = UserDefaults.standard
+        defaults.set(theme.rawValue, forKey: StorageKeys.theme)
+        defaults.set(Double(fontSize), forKey: StorageKeys.fontSize)
+        defaults.set(Double(contentWidth), forKey: StorageKeys.contentWidth)
+        defaults.set(lineHeight.rawValue, forKey: StorageKeys.lineHeight)
+        defaults.set(showTOC, forKey: StorageKeys.showTOC)
+        defaults.set(viewMode.rawValue, forKey: StorageKeys.viewMode)
+    }
+
+    func saveLastOpenedFile(_ url: URL) {
+        // Save file URL as string for display/reference
+        UserDefaults.standard.set(url.path, forKey: StorageKeys.lastFileURL)
+
+        // Save security-scoped bookmark for reopening
+        do {
+            let bookmarkData = try url.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+            UserDefaults.standard.set(bookmarkData, forKey: StorageKeys.lastFileBookmark)
+        } catch {
+            print("Failed to create bookmark: \(error)")
+        }
+    }
+
+    func restoreLastOpenedFile() -> Bool {
+        guard let bookmarkData = UserDefaults.standard.data(forKey: StorageKeys.lastFileBookmark) else {
+            return false
+        }
+
+        do {
+            var isStale = false
+            let url = try URL(
+                resolvingBookmarkData: bookmarkData,
+                options: .withSecurityScope,
+                relativeTo: nil,
+                bookmarkDataIsStale: &isStale
+            )
+
+            if isStale {
+                // Bookmark is stale, try to refresh it
+                saveLastOpenedFile(url)
+            }
+
+            // Access the security-scoped resource
+            guard url.startAccessingSecurityScopedResource() else {
+                return false
+            }
+
+            openFile(url)
+            return true
+        } catch {
+            print("Failed to restore bookmark: \(error)")
+            return false
+        }
+    }
+
+    var lastOpenedFilePath: String? {
+        UserDefaults.standard.string(forKey: StorageKeys.lastFileURL)
     }
 
     // MARK: - Debounced Render Update
@@ -395,6 +533,7 @@ class AppState: ObservableObject {
         if viewMode == .read {
             debouncedMarkdown = markdownText
         }
+        saveSettings()
     }
 
     func scrollToHeading(_ heading: Heading) {
@@ -440,6 +579,9 @@ class AppState: ObservableObject {
 
             currentFileURL = url
             windowTitle = url.lastPathComponent
+
+            // Save as last opened file for restoration
+            saveLastOpenedFile(url)
 
             // Update window title
             DispatchQueue.main.async {
