@@ -183,6 +183,59 @@ struct MarkdownRenderer {
                 pre code:not(.hljs) {
                     opacity: 0.9;
                 }
+                /* Code block wrapper for copy button */
+                .code-block-wrapper {
+                    position: relative;
+                    margin: 0.75em 0;
+                }
+                .code-block-wrapper pre {
+                    margin: 0;
+                }
+                /* Copy button */
+                .copy-btn {
+                    position: absolute;
+                    top: 8px;
+                    right: 8px;
+                    width: 32px;
+                    height: 32px;
+                    padding: 0;
+                    border: none;
+                    border-radius: 6px;
+                    cursor: pointer;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    opacity: 0;
+                    pointer-events: none;
+                    transition: opacity 0.2s ease, background-color 0.15s ease, transform 0.1s ease;
+                    z-index: 10;
+                    \(themeCSS.copyButton)
+                }
+                .code-block-wrapper:hover .copy-btn,
+                .copy-btn:focus {
+                    opacity: 1;
+                    pointer-events: auto;
+                }
+                .copy-btn:hover {
+                    \(themeCSS.copyButtonHover)
+                }
+                .copy-btn:active {
+                    transform: scale(0.92);
+                }
+                .copy-btn svg {
+                    width: 16px;
+                    height: 16px;
+                    pointer-events: none;
+                    \(themeCSS.copyButtonIcon)
+                }
+                .copy-btn.copied {
+                    opacity: 1;
+                    pointer-events: auto;
+                }
+                .copy-btn.copied svg {
+                    color: #22c55e;
+                    stroke: #22c55e;
+                }
                 /* Blockquotes */
                 blockquote {
                     padding: 0.5em 1em;
@@ -329,6 +382,78 @@ struct MarkdownRenderer {
                     initLazyHighlight();
                 }
             })();
+
+            // Copy button functionality
+            (function() {
+                'use strict';
+
+                // SVG icons
+                const copyIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
+                const checkIcon = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>';
+
+                // Fallback copy function for WKWebView
+                function copyText(text) {
+                    // Try modern API first
+                    if (navigator.clipboard && navigator.clipboard.writeText) {
+                        return navigator.clipboard.writeText(text);
+                    }
+
+                    // Fallback: use textarea + execCommand
+                    return new Promise(function(resolve, reject) {
+                        const textarea = document.createElement('textarea');
+                        textarea.value = text;
+                        textarea.style.position = 'fixed';
+                        textarea.style.left = '-9999px';
+                        textarea.style.top = '-9999px';
+                        document.body.appendChild(textarea);
+                        textarea.focus();
+                        textarea.select();
+
+                        try {
+                            const success = document.execCommand('copy');
+                            document.body.removeChild(textarea);
+                            if (success) {
+                                resolve();
+                            } else {
+                                reject(new Error('execCommand failed'));
+                            }
+                        } catch (err) {
+                            document.body.removeChild(textarea);
+                            reject(err);
+                        }
+                    });
+                }
+
+                function showSuccess(btn) {
+                    btn.innerHTML = checkIcon;
+                    btn.classList.add('copied');
+
+                    setTimeout(function() {
+                        btn.innerHTML = copyIcon;
+                        btn.classList.remove('copied');
+                    }, 2000);
+                }
+
+                document.addEventListener('click', function(e) {
+                    const btn = e.target.closest('.copy-btn');
+                    if (!btn) return;
+
+                    const wrapper = btn.closest('.code-block-wrapper');
+                    const code = wrapper.querySelector('code');
+                    if (!code) return;
+
+                    // Get text content (without HTML)
+                    const text = code.textContent || code.innerText;
+
+                    copyText(text).then(function() {
+                        showSuccess(btn);
+                    }).catch(function(err) {
+                        console.error('Failed to copy:', err);
+                        // Still show success for better UX (execCommand might report false negative)
+                        showSuccess(btn);
+                    });
+                });
+            })();
             </script>
         </body>
         </html>
@@ -359,7 +484,10 @@ struct MarkdownRenderer {
                 tableHeader: "background: #f6f8fa;",
                 h1Border: "border-color: #d0d7de;",
                 h2Border: "border-color: #d0d7de;",
-                hr: "background: #d0d7de;"
+                hr: "background: #d0d7de;",
+                copyButton: "background: rgba(255, 255, 255, 0.9); box-shadow: 0 1px 3px rgba(0,0,0,0.12);",
+                copyButtonHover: "background: #ffffff; box-shadow: 0 2px 6px rgba(0,0,0,0.15);",
+                copyButtonIcon: "color: #57606a; stroke: #57606a;"
             )
         case .dark:
             return ThemeCSS(
@@ -375,7 +503,10 @@ struct MarkdownRenderer {
                 tableHeader: "background: #161b22;",
                 h1Border: "border-color: #30363d;",
                 h2Border: "border-color: #30363d;",
-                hr: "background: #30363d;"
+                hr: "background: #30363d;",
+                copyButton: "background: rgba(48, 54, 61, 0.9); box-shadow: 0 1px 3px rgba(0,0,0,0.3);",
+                copyButtonHover: "background: #3b434b; box-shadow: 0 2px 6px rgba(0,0,0,0.4);",
+                copyButtonIcon: "color: #8b949e; stroke: #8b949e;"
             )
         case .sepia:
             return ThemeCSS(
@@ -391,7 +522,10 @@ struct MarkdownRenderer {
                 tableHeader: "background: #f0e8d6;",
                 h1Border: "border-color: #d4c4a8;",
                 h2Border: "border-color: #d4c4a8;",
-                hr: "background: #d4c4a8;"
+                hr: "background: #d4c4a8;",
+                copyButton: "background: rgba(255, 252, 242, 0.9); box-shadow: 0 1px 3px rgba(0,0,0,0.1);",
+                copyButtonHover: "background: #fffcf2; box-shadow: 0 2px 6px rgba(0,0,0,0.12);",
+                copyButtonIcon: "color: #7a6b57; stroke: #7a6b57;"
             )
         }
     }
@@ -411,6 +545,9 @@ private struct ThemeCSS {
     let h1Border: String
     let h2Border: String
     let hr: String
+    let copyButton: String
+    let copyButtonHover: String
+    let copyButtonIcon: String
 }
 
 struct HTMLVisitor: MarkupVisitor {
@@ -457,7 +594,13 @@ struct HTMLVisitor: MarkupVisitor {
     mutating func visitCodeBlock(_ codeBlock: CodeBlock) -> String {
         let language = codeBlock.language ?? ""
         let langClass = language.isEmpty ? "" : "language-\(language)"
-        return "<pre><code class=\"\(langClass)\">\(escapeHTML(codeBlock.code))</code></pre>\n"
+        let copyIcon = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"><rect x=\"9\" y=\"9\" width=\"13\" height=\"13\" rx=\"2\" ry=\"2\"></rect><path d=\"M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1\"></path></svg>"
+        return """
+        <div class="code-block-wrapper">
+            <button class="copy-btn" title="Copy code">\(copyIcon)</button>
+            <pre><code class="\(langClass)">\(escapeHTML(codeBlock.code))</code></pre>
+        </div>
+        """
     }
 
     mutating func visitLink(_ link: Link) -> String {
