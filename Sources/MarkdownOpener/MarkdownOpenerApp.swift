@@ -549,10 +549,6 @@ class AppState: ObservableObject {
         withAnimation(.easeInOut(duration: 0.3)) {
             focusMode.toggle()
         }
-        // Auto-switch to edit mode when entering focus mode (for writing)
-        if focusMode && viewMode == .read {
-            viewMode = .edit
-        }
     }
 
     func scrollToHeading(_ heading: Heading) {

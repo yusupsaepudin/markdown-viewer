@@ -21,8 +21,8 @@ A fast, native macOS application for viewing and editing Markdown files with liv
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/MarkdownOpener.git
-cd MarkdownOpener
+git clone https://github.com/yusupsaepudin/markdown-viewer.git
+cd markdown-viewer
 
 # Build release
 swift build -c release
@@ -30,18 +30,6 @@ swift build -c release
 # Run directly
 swift run MarkdownOpener
 ```
-
-### Install to Applications
-
-```bash
-# Copy binary to app bundle
-cp .build/arm64-apple-macosx/release/MarkdownOpener MarkdownOpener.app/Contents/MacOS/
-
-# Install to Applications folder
-cp -R MarkdownOpener.app /Applications/
-```
-
-After installation, launch from Spotlight (Cmd+Space → "MarkdownOpener") or the Applications folder.
 
 ## Usage
 
@@ -60,9 +48,10 @@ After installation, launch from Spotlight (Cmd+Space → "MarkdownOpener") or th
 | Cmd+E | Toggle Read/Edit mode |
 | Cmd+T | Toggle Table of Contents |
 | Cmd+F | Search |
+| Shift+Cmd+F | Toggle Focus Mode |
 | Cmd++ | Increase font size |
 | Cmd+- | Decrease font size |
-| Escape | Close search |
+| Escape | Close search / Exit Focus Mode |
 
 ### Themes
 
@@ -84,7 +73,3 @@ Built with Swift and SwiftUI, using:
 - **NSTextView** (AppKit) for high-performance text editing
 - **WKWebView** (WebKit) for rendered markdown preview
 - **swift-markdown** for CommonMark-compliant parsing
-
-## License
-
-MIT License
